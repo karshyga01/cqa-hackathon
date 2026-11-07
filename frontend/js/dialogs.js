@@ -471,7 +471,7 @@
     } else if (up.source === 'file') {
       text = up.file ? 'Загрузить ' + nDialogs(up.file.count) : 'Загрузить из файла';
     } else {
-      text = 'Добавить диалог';
+      text = CQA.ai.available ? 'Разобрать с ИИ и добавить' : 'Добавить диалог';
     }
     $('#up-submit-text').textContent = text;
     $('#up-submit').disabled = up.busy || (up.source === 'file' && !up.file);
@@ -581,8 +581,34 @@
     }
 
     var text = $('#up-text').value;
-    if (!text.trim()) { upStatus('error', '<p>Вставьте транскрипт: каждая реплика с новой строки.</p>'); $('#up-text').focus(); return; }
+    if (!text.trim()) { upStatus('error', '<p>Вставьте текст диалога или загрузите текстовый файл.</p>'); $('#up-text').focus(); return; }
     setBusy(true, btn);
+
+    // С ИИ — любой формат: ИИ раскладывает на реплики, сервер проверяет дословность.
+    if (CQA.ai.available) {
+      upStatus('loading', '<p>ИИ раскладывает текст на диалоги и реплики…</p>');
+      var lang = $('#up-text-lang').value;
+      var chan = $('#up-text-chan').value;
+      CQA.api.post('/api/import/ai', {
+        text: text,
+        conversation_id: $('#up-text-id').value.trim() || undefined,
+        language: lang === 'auto' ? undefined : lang,
+        channel: chan === 'call' ? 'voice call' : chan === 'chat' ? 'agent chat' : undefined
+      }).then(function (res) {
+        $('#up-text').value = '';
+        $('#up-text-id').value = '';
+        var ROLE = { client: 'клиент', operator: 'оператор', bot: 'бот', system: 'система' };
+        var list = (res.dialogs || []).map(function (d) {
+          var roles = Object.keys(d.roles || {}).map(function (r) { return (ROLE[r] || r) + ' ' + d.roles[r]; }).join(', ');
+          return d.conversation_id + ' (' + (d.channel === 'voice call' ? 'звонок' : 'чат') + ', ' + d.language + ', ' + d.turns + ' репл.: ' + roles + ')';
+        });
+        return afterImport(res, '', 'ИИ разобрал текст: ' + nDialogs(list.length) + ' в наборе ' + res.group_id + ' — ' + list.join('; ') + (res.cost_usd ? ' · ' + CQA.money(res.cost_usd) : ''));
+      }).catch(function (err) {
+        upStatus('error', '<p>' + esc(err.message) + '</p>');
+      }).then(function () { setBusy(false); });
+      return;
+    }
+
     upStatus('loading', '<p>Добавляю диалог…</p>');
     CQA.api.post('/api/import/text', {
       text: text,
@@ -630,12 +656,14 @@
     reader.onload = function () {
       if (token !== readToken) return; // уже выбрали другой файл
       var payload;
-      try { payload = JSON.parse(String(reader.result).replace(/^﻿/, '')); } catch (_) {
-        upStatus('error', '<p>«' + esc(file.name) + '» — это не JSON. Проверьте файл.</p>');
-        upSubmitLabel();
+      var raw = String(reader.result).replace(/^﻿/, '');
+      try { payload = JSON.parse(raw); } catch (_) {
+        // Не JSON — это просто текст: отдаём его во «Вставить что угодно», ИИ разложит сам.
+        moveToPaste(raw, file.name);
         return;
       }
       var c = countRecords(payload);
+      if (c.error && CQA.ai.available) { moveToPaste(raw, file.name); return; }
       if (c.error) { upStatus('error', '<p>' + esc(c.error) + '</p>'); upSubmitLabel(); return; }
       if (!c.count) { upStatus('error', '<p>В файле нет диалогов.</p>'); upSubmitLabel(); return; }
       up.file = { name: file.name, payload: payload, count: c.count, groupId: c.groupId };
@@ -648,6 +676,17 @@
     };
     reader.onerror = function () { if (token === readToken) { upStatus('error', '<p>Не удалось прочитать файл.</p>'); upSubmitLabel(); } };
     reader.readAsText(file);
+  }
+
+  /** Текст файла → вкладка «Вставить что угодно» (без ИИ — только строгий формат «время роль: текст»). */
+  function moveToPaste(text, name) {
+    resetFileUi();
+    $('#up-text').value = text;
+    var tab = document.querySelector('[data-src="paste"]');
+    if (tab) tab.click();
+    upStatus(CQA.ai.available ? 'ok' : 'warn', CQA.ai.available
+      ? '<p>«' + esc(name) + '» — не JSON, перенёс текст сюда. Нажмите «Разобрать с ИИ» — ИИ разложит его на диалоги.</p>'
+      : '<p>«' + esc(name) + '» — не JSON, перенёс текст сюда. ИИ не подключён: текст должен быть в виде «время роль: текст».</p>');
   }
 
   /** Подсвечивает только что загруженные строки (если они на текущей странице). */
@@ -676,6 +715,24 @@
     $('#up-group').addEventListener('input', function () { up.preview = null; upStatus(null); upSubmitLabel(); });
     $('#up-check').addEventListener('click', checkApi);
     $('#up-form').addEventListener('submit', function (e) { e.preventDefault(); submitUpload(); });
+
+    // «Вставить что угодно» → «загрузить текстовый файл»: читаем текст файла в поле
+    var textFile = $('#up-text-file');
+    $('#up-text-file-btn').addEventListener('click', function () { textFile.click(); });
+    textFile.addEventListener('change', function () {
+      var f = textFile.files && textFile.files[0];
+      textFile.value = '';
+      if (!f) return;
+      if (f.size > 2 * 1024 * 1024) { upStatus('error', '<p>Файл больше 2 МБ — для текста диалога это слишком много.</p>'); return; }
+      var rd = new FileReader();
+      rd.onload = function () { $('#up-text').value = String(rd.result).replace(/^﻿/, ''); upStatus('ok', '<p>Текст из «' + esc(f.name) + '» вставлен. Нажмите «' + esc($('#up-submit-text').textContent) + '».</p>'); };
+      rd.onerror = function () { upStatus('error', '<p>Не удалось прочитать файл.</p>'); };
+      rd.readAsText(f);
+    });
+    CQA.aiReady.then(function (ai) {
+      if (!(ai && ai.available)) $('#up-text-help').textContent = 'ИИ не подключён: каждая реплика с новой строки — время (можно без него), роль, двоеточие, текст. Роли: client, operator, bot, system — можно по-русски.';
+      upSubmitLabel();
+    });
 
     var input = $('#up-file');
     var drop = $('#up-drop');

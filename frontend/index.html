@@ -854,7 +854,7 @@
       <div class="cqa-seg" role="tablist" data-src-tabs>
         <button type="button" role="tab" aria-selected="true" data-src="api">Из API организаторов</button>
         <button type="button" role="tab" aria-selected="false" data-src="file">Файл</button>
-        <button type="button" role="tab" aria-selected="false" data-src="paste">Вставить текст</button>
+        <button type="button" role="tab" aria-selected="false" data-src="paste">Вставить что угодно</button>
       </div>
 
       <!-- Из API -->
@@ -872,11 +872,11 @@
       <!-- Файл -->
       <div class="cqa-src-pane" data-pane="file">
         <label class="cqa-drop" id="up-drop">
-          <input type="file" id="up-file" accept=".json,application/json" class="sr-only">
+          <input type="file" id="up-file" accept=".json,.txt,.csv,.md,.log,.tsv,application/json,text/*" class="sr-only">
           <span class="cqa-drop-icon"><svg class="i"><use href="#i-file"/></svg></span>
           <b id="up-file-title">Перетащите файл сюда</b>
           <span id="up-file-sub">или <span class="cqa-btn-link">выберите на компьютере</span></span>
-          <span class="cqa-help">JSON в формате API организаторов, массив диалогов или один диалог</span>
+          <span class="cqa-help">JSON в формате API организаторов, массив диалогов или один диалог. Любой другой текстовый файл (.txt, .csv…) — ИИ разложит сам</span>
         </label>
         <label class="cqa-field">
           <span class="cqa-label">Название набора</span>
@@ -887,9 +887,10 @@
       <!-- Текст -->
       <div class="cqa-src-pane" data-pane="paste">
         <label class="cqa-field">
-          <span class="cqa-label">Транскрипт</span>
-          <textarea class="cqa-textarea" id="up-text" style="min-height:170px" spellcheck="false" placeholder="00:02 operator: Здравствуйте! Меня зовут Айгерим.&#10;00:10 client: Хочу узнать про тарифы&#10;00:40 system: Чат закрыт"></textarea>
-          <span class="cqa-help">Каждая реплика с новой строки: время (можно без него), роль, двоеточие, текст. Роли: client, operator, bot, system — можно по-русски.</span>
+          <span class="cqa-label">Текст диалога — в любом виде <button class="cqa-btn-link" type="button" id="up-text-file-btn">или загрузить текстовый файл</button></span>
+          <input type="file" id="up-text-file" accept=".txt,.csv,.md,.log,.json,.tsv,text/*" class="sr-only">
+          <textarea class="cqa-textarea" id="up-text" style="min-height:170px" spellcheck="false" placeholder="Вставьте переписку как есть: экспорт из Telegram или CRM, расшифровку звонка, кусок письма…&#10;&#10;Алина: Здравствуйте! Меня зовут Алина, Freedom Broker.&#10;Иван: Где посмотреть тариф?"></textarea>
+          <span class="cqa-help" id="up-text-help">ИИ сам разложит текст на диалоги и реплики (клиент, оператор, бот, система). Текст реплик не меняется — система проверяет, что каждая реплика есть в исходнике дословно.</span>
         </label>
         <div class="cqa-up-grid3">
           <label class="cqa-field">
@@ -908,6 +909,7 @@
           <label class="cqa-field">
             <span class="cqa-label">Канал</span>
             <select class="cqa-select" id="up-text-chan">
+              <option value="auto">Определить сам</option>
               <option value="chat">Чат</option>
               <option value="call">Звонок</option>
             </select>

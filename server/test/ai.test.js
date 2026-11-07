@@ -525,3 +525,48 @@ test('оценка с примерами: они в запросе, меняют
   assert.deepEqual(withEx.usage.appeal_examples, { c_closing: [3] });
   assert.notEqual(withEx.answers.c_closing.fp, plain.answers.c_closing.fp);
 });
+
+/* ---------- «Вставить что угодно»: ИИ раскладывает текст на диалоги ---------- */
+
+test('дословность: реплика без изменений проходит, переписанная — нет', () => {
+  const src = '10:02 Алина: Здравствуйте! Меня зовут Алина.\n10:03 Иван: Где  посмотреть тариф?';
+  const ok = AI.checkVerbatim(src, [{ turns: [{ speaker: 'operator', timestamp: '10:02', text: 'Здравствуйте! Меня зовут Алина.' }, { speaker: 'client', timestamp: '10:03', text: 'Где посмотреть тариф?' }] }]);
+  assert.deepEqual(ok.problems, []);
+  assert.equal(ok.dialogs[0].turns.length, 2);
+  const bad = AI.checkVerbatim(src, [{ turns: [{ speaker: 'client', timestamp: '', text: 'Подскажите, где тариф?' }] }]);
+  assert.equal(bad.problems.length, 1);
+});
+
+test('API: вставка в свободном виде → ИИ раскладывает → диалог сохранён; изменённый текст не сохраняется', async () => {
+  const fs = require('fs'); const os = require('os'); const path = require('path'); const http = require('http');
+  const { createServer } = require('../server');
+  const src = 'Чат 15 октября\nАлина (поддержка): Здравствуйте! Меня зовут Алина, Freedom Broker.\nИван: Где посмотреть тариф?\nАлина (поддержка): В Кабинете под ФИО.';
+  const good = { dialogs: [{ conversation_id: '', language: 'RU', channel: 'agent chat', turns: [
+    { speaker: 'operator', timestamp: '', text: 'Здравствуйте! Меня зовут Алина, Freedom Broker.' },
+    { speaker: 'client', timestamp: '', text: 'Где посмотреть тариф?' },
+    { speaker: 'operator', timestamp: '', text: 'В Кабинете под ФИО.' }] }] };
+  const rewritten = { dialogs: [{ conversation_id: '', language: 'RU', channel: 'agent chat', turns: [{ speaker: 'client', timestamp: '', text: 'Подскажите тариф' }] }] };
+  const fr = fakeRouter([good, rewritten]);
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cqa-aiimp-'));
+  const server = createServer({ dataDir, resultsDir: dataDir, orgApiUrl: 'http://127.0.0.1:9/none', allowedOrigins: [], autoDownloadAudio: false, ai: { apiKey: 'sk-test-key' }, aiFetch: fr.fetchImpl });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const call = (p, body) => new Promise((resolve, reject) => {
+    const rq = http.request({ host: '127.0.0.1', port, path: p, method: 'POST', headers: { 'Content-Type': 'application/json' } }, (res) => {
+      const ch = []; res.on('data', (c) => ch.push(c)); res.on('end', () => resolve({ status: res.statusCode, json: JSON.parse(Buffer.concat(ch).toString()) })); });
+    rq.on('error', reject); rq.write(JSON.stringify(body)); rq.end();
+  });
+  try {
+    assert.equal((await call('/api/import/ai', { text: '  ' })).status, 422);
+    const r = await call('/api/import/ai', { text: src });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.json.group_id, 'MANUAL');
+    assert.equal(r.json.dialogs.length, 1);
+    assert.deepEqual(r.json.dialogs[0].roles, { operator: 2, client: 1 });
+    assert.match(r.json.dialogs[0].conversation_id, /^txt-/);
+    assert.equal(fr.calls[0].body.messages[1].content, src, 'текст ушёл в ИИ как есть');
+    const bad = await call('/api/import/ai', { text: src });
+    assert.equal(bad.status, 422);
+    assert.match(bad.json.error, /изменил текст/);
+  } finally { server.close(); }
+});

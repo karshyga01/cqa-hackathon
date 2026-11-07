@@ -25,7 +25,10 @@ const { createAudioService } = require('./lib/audio');
 const { createChecklistService } = require('./lib/checklists');
 const { createEvaluationService } = require('./lib/evaluations');
 const { mockEvaluate } = require('./lib/mockEvaluator');
-const { createAiEvaluator } = require('./lib/aiEvaluator');
+const { createAiEvaluator, checkVerbatim } = require('./lib/aiEvaluator');
+
+// «Вставить что угодно»: сколько текста за раз (ответ модели ограничен ~16 тыс. токенов).
+const AI_IMPORT_MAX_CHARS = 40000;
 const { createAppealService, totalWith } = require('./lib/appeals');
 const results = require('./lib/results');
 const { computeStats } = require('./lib/stats');
@@ -550,6 +553,40 @@ function createApp({
     ['POST', /^\/api\/import\/text$/, async (req) => {
       const body = await readJsonBody(req);
       return dialogs.saveFromText(body);
+    }],
+
+    // «Вставить что угодно»: ИИ раскладывает произвольный текст на диалоги; текст реплик проверяется на дословность.
+    ['POST', /^\/api\/import\/ai$/, async (req) => {
+      const body = await readJsonBody(req);
+      const text = String(body.text || '');
+      if (!text.trim()) throw new HttpError(422, 'Вставьте текст или выберите файл.');
+      if (text.length > AI_IMPORT_MAX_CHARS) throw new HttpError(413, `Текст слишком длинный (${text.length} символов). За один раз — до ${AI_IMPORT_MAX_CHARS}; разделите на части.`);
+      if (!ai.available) throw new HttpError(503, 'ИИ не подключён — используйте строгий формат «время роль: текст» или JSON.');
+      let out;
+      try { out = await ai.structure(text); } catch (err) { throw new HttpError(err.status || 502, err.message); }
+      const { problems, dialogs: found } = checkVerbatim(text, out.dialogs);
+      if (!found.length) throw new HttpError(422, 'ИИ не нашёл в тексте ни одной реплики.');
+      if (problems.length) {
+        const e = new HttpError(422, `ИИ изменил текст реплик — сохранять не стал. ${problems.slice(0, 3).join('; ')}${problems.length > 3 ? ` и ещё ${problems.length - 3}` : ''}.`);
+        throw e;
+      }
+      const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-');
+      const single = found.length === 1;
+      const records = found.map((d, k) => {
+        const own = String(d.conversation_id || '').trim().replace(/[:\s]+/g, '-');
+        const id = (single && String(body.conversation_id || '').trim()) || own || `txt-${stamp}${single ? '' : `-${k + 1}`}`;
+        const language = single && ['RU', 'KZ', 'EN'].includes(body.language) ? body.language : d.language;
+        const channel = single && ['agent chat', 'voice call'].includes(body.channel) ? body.channel : d.channel;
+        return { conversation_id: id.replace(/:/g, '-'), channel, language, transcript: d.turns, audio_url: null };
+      });
+      const groupId = dialogs.resolveGroupId(body.group_id, null) || 'MANUAL';
+      const result = withAudio(await dialogs.saveRecords(groupId, records, 'ai-text'));
+      return {
+        ...result,
+        dialogs: records.map((r) => ({ conversation_id: r.conversation_id, language: r.language, channel: r.channel, turns: r.transcript.length,
+          roles: r.transcript.reduce((a, t) => { a[t.speaker] = (a[t.speaker] || 0) + 1; return a; }, {}) })),
+        cost_usd: out.usage.cost_usd,
+      };
     }],
   ];
 
