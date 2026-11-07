@@ -176,7 +176,17 @@ function createApp({
     });
   }
 
-  async function evaluateDialog(key, { mode = 'mock', checklistId, force = false, useAppeals = false } = {}) {
+  // Какие диалоги сейчас оцениваются — такие нельзя удалить (оценка допишется к удалённому).
+  const evaluatingNow = new Map();
+  async function evaluateDialog(key, opts) {
+    evaluatingNow.set(key, (evaluatingNow.get(key) || 0) + 1);
+    try { return await evaluateDialogNow(key, opts); } finally {
+      const n = (evaluatingNow.get(key) || 1) - 1;
+      if (n > 0) evaluatingNow.set(key, n); else evaluatingNow.delete(key);
+    }
+  }
+
+  async function evaluateDialogNow(key, { mode = 'mock', checklistId, force = false, useAppeals = false } = {}) {
     await checklistsReady;
     const record = dialogs.get(key);
     if (!record) throw new HttpError(404, `Диалог ${key} не найден.`);
@@ -557,6 +567,38 @@ function createApp({
     ['POST', /^\/api\/import\/text$/, async (req) => {
       const body = await readJsonBody(req);
       return dialogs.saveFromText(body);
+    }],
+
+    // Удалить диалоги: сам диалог, его оценки, апелляции и файл записи звонка.
+    ['POST', /^\/api\/dialogs\/delete$/, async (req) => {
+      const body = await readJsonBody(req);
+      const keys = Array.isArray(body.keys) ? [...new Set(body.keys.filter((k) => typeof k === 'string'))].slice(0, 1000) : [];
+      if (!keys.length) throw new HttpError(400, 'Не выбраны диалоги для удаления.');
+      const busy = keys.filter((k) => evaluatingNow.has(k));
+      if (busy.length) throw new HttpError(409, `Сейчас оцениваются: ${busy.map((k) => k.split(':').pop()).join(', ')}. Дождитесь окончания оценки.`);
+      const removed = await dialogs.remove(keys);
+      const gone = new Set(removed);
+      let evals = 0;
+      let aps = 0;
+      const files = [];
+      await store.update('evaluations', (cur) => {
+        const next = { ...cur };
+        for (const k of removed) if (Object.prototype.hasOwnProperty.call(next, k)) { evals += (next[k] || []).length; delete next[k]; }
+        return next;
+      });
+      await store.update('appeals', (cur) => {
+        const state = cur && Array.isArray(cur.items) ? cur : { seq: 0, items: [] };
+        const items = state.items.filter((a) => !gone.has(a.dialog_key));
+        aps = state.items.length - items.length;
+        return { ...state, items };
+      });
+      await store.update('audio', (cur) => {
+        const next = { ...cur };
+        for (const k of removed) if (next[k]) { files.push(next[k].file); delete next[k]; }
+        return next;
+      });
+      for (const f of files) await fs.promises.unlink(path.join(dataDir, 'audio', path.basename(f))).catch(() => {});
+      return { deleted: removed.length, evaluations: evals, appeals: aps, audio_files: files.length, not_found: keys.length - removed.length };
     }],
 
     // Своя запись звонка: распознавание ЛОКАЛЬНО (whisper.cpp) → роли по смыслу текста (ИИ) → звонок с плеером.

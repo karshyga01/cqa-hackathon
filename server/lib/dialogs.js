@@ -173,7 +173,22 @@ function createDialogService(store, { now = () => new Date().toISOString() } = {
     });
   }
 
-  return { list, get, listDatasets, saveRecords, preview, resolveGroupId, saveFromText };
+  /** Удалить диалоги (по очереди с импортами). Возвращает ключи, которые реально были. */
+  function remove(keys) {
+    return exclusive(async () => {
+      const wanted = new Set((keys || []).map(String));
+      let removed = [];
+      await store.update('dialogs', (cur) => {
+        const next = { ...cur };
+        removed = Object.keys(next).filter((k) => wanted.has(k));
+        removed.forEach((k) => { delete next[k]; });
+        return next;
+      });
+      return removed;
+    });
+  }
+
+  return { list, get, listDatasets, saveRecords, preview, resolveGroupId, saveFromText, remove };
 }
 
 module.exports = { createDialogService };

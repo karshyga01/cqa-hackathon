@@ -213,3 +213,51 @@ test('статистика: потери по критериям в сумме =
   assert.equal(kz.gross_count, 1);
   assert.equal(computeStats(items, { channel: 'voice call' }).evaluated, 0);
 });
+
+/* ---------- удаление диалогов ---------- */
+
+test('API: удалить выбранные — диалог, его оценки, апелляции и запись; соседний не трогается', async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cqa-del-'));
+  const server = createServer({ dataDir, resultsDir: dataDir, orgApiUrl: 'http://127.0.0.1:9/none', allowedOrigins: [], autoDownloadAudio: false, ai: { apiKey: '' } });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const call = (method, p, body) => new Promise((resolve, reject) => {
+    const rq = http.request({ host: '127.0.0.1', port, path: p, method, headers: body !== undefined ? { 'Content-Type': 'application/json' } : {} }, (res) => {
+      const chunks = []; res.on('data', (c) => chunks.push(c));
+      res.on('end', () => { const t = Buffer.concat(chunks).toString(); resolve({ status: res.statusCode, json: t ? JSON.parse(t) : null }); });
+    });
+    rq.on('error', reject); if (body !== undefined) rq.write(JSON.stringify(body)); rq.end();
+  });
+  try {
+    await call('POST', '/api/import/json', { group_id: 'X', payload: [
+      { conversation_id: 'a', channel: 'agent chat', language: 'RU', transcript: T },
+      { conversation_id: 'b', channel: 'agent chat', language: 'RU', transcript: T },
+    ] });
+    const ka = encodeURIComponent('X:a');
+    await call('POST', `/api/dialogs/${ka}/evaluate`, { mode: 'mock' });
+    await call('POST', `/api/dialogs/${encodeURIComponent('X:b')}/evaluate`, { mode: 'mock' });
+    const ev = (await call('GET', `/api/dialogs/${ka}/evaluation`)).json.evaluation;
+    const crit = Object.keys(ev.answers).find((k) => ev.answers[k].answer === 'no');
+    assert.equal((await call('POST', `/api/dialogs/${ka}/appeals`, { role: 'analyst', evaluation_id: ev.id, criterion_key: crit, comment: 'не согласен с оценкой' })).status, 200);
+    // звонок с записью у нас — файл тоже должен удалиться
+    fs.mkdirSync(path.join(dataDir, 'audio'), { recursive: true });
+    fs.writeFileSync(path.join(dataDir, 'audio', 'X_a.mp3'), 'x');
+    fs.writeFileSync(path.join(dataDir, 'audio.json'), JSON.stringify({ 'X:a': { file: 'X_a.mp3', bytes: 1 } }));
+
+    assert.equal((await call('POST', '/api/dialogs/delete', { keys: [] })).status, 400);
+    const r = await call('POST', '/api/dialogs/delete', { keys: ['X:a', 'X:nope'] });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.deleted, 1);
+    assert.equal(r.json.not_found, 1);
+    assert.equal(r.json.evaluations, 1);
+    assert.equal(r.json.appeals, 1);
+    assert.equal((await call('GET', `/api/dialogs/${ka}`)).status, 404);
+    assert.equal((await call('GET', `/api/dialogs/${ka}/evaluation`)).status, 404);
+    assert.equal((await call('GET', '/api/appeals')).json.items.length, 0);
+    const left = (await call('GET', '/api/dialogs')).json.items.map((d) => d.key);
+    assert.deepEqual(left, ['X:b']);
+    assert.equal((await call('GET', `/api/dialogs/${encodeURIComponent('X:b')}/evaluation`)).status, 200, 'соседний диалог и его оценка на месте');
+  } finally {
+    server.close();
+  }
+});

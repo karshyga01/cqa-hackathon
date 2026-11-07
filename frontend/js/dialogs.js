@@ -354,6 +354,13 @@
     });
     $('#dl-sel-clear').addEventListener('click', function () { state.selected = {}; renderTable(); });
     $('#dl-evaluate').addEventListener('click', evaluateSelected);
+    $('#dl-delete').addEventListener('click', deleteSelected);
+    // Окно подтверждения общее (то же, что в чек-листах): наш обработчик срабатывает только для нашего вопроса.
+    $('#mcf-ok').addEventListener('click', function () {
+      var cb = deleteConfirmCb; deleteConfirmCb = null;
+      if (cb) { CQA.closeModal('modal-confirm'); cb(); }
+    });
+    $('#modal-confirm').addEventListener('cqa:modal-close', function () { deleteConfirmCb = null; });
     CQA.aiReady.then(function (ai) {
       var help = $('#dl-eval-help');
       if (help && ai && ai.available) help.textContent = 'Оценка ИИ (' + CQA.shortModel(ai.model) + '). Повторно спрашиваются только изменившиеся критерии';
@@ -386,6 +393,32 @@
       renderTable();
       $('#dl-body').closest('.cqa-panel').scrollIntoView({ block: 'start', behavior: 'smooth' });
     });
+  }
+
+  /* Удалить выбранные: диалог, его оценки, апелляции и запись звонка — после подтверждения. */
+  var deleteConfirmCb = null;
+  function deleteSelected() {
+    var keys = Object.keys(state.selected);
+    if (!keys.length || evaluating) return;
+    var names = keys.slice(0, 5).map(function (k) { return k.split(':').slice(1).join(':'); }).join(', ') + (keys.length > 5 ? ' и ещё ' + (keys.length - 5) : '');
+    $('#mcf-title').textContent = 'Удалить ' + nDialogs(keys.length) + '?';
+    $('#mcf-text').textContent = names + '. Вместе с ними удалятся их оценки, апелляции и записи звонков. Вернуть будет нельзя — только загрузить заново.';
+    var ok = $('#mcf-ok');
+    ok.textContent = 'Удалить';
+    ok.className = 'cqa-btn cqa-btn-danger';
+    deleteConfirmCb = function () {
+      var btn = $('#dl-delete');
+      btn.disabled = true;
+      CQA.api.post('/api/dialogs/delete', { keys: keys }).then(function (res) {
+        state.selected = {};
+        CQA.toast('Удалено: ' + nDialogs(res.deleted) +
+          (res.evaluations ? ', оценок ' + res.evaluations : '') + (res.appeals ? ', апелляций ' + res.appeals : '') + (res.audio_files ? ', записей ' + res.audio_files : ''));
+        document.dispatchEvent(new CustomEvent('cqa:appeals-changed'));
+        document.dispatchEvent(new CustomEvent('cqa:evaluations-changed', { detail: { fromList: true } }));
+        return load();
+      }).catch(function (err) { CQA.toast(err.message); }).then(function () { btn.disabled = false; });
+    };
+    CQA.openModal('modal-confirm');
   }
 
   /* Оценить выбранные: ИИ, если он подключён, иначе подставная оценка по правилам.
