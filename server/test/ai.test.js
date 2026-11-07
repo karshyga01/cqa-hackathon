@@ -435,3 +435,28 @@ test('API: пачка с остановкой — каждый диалог уч
     await new Promise((res) => server2.close(res));
   }
 });
+
+/* ---------- объяснения только по-русски ---------- */
+
+test('язык объяснения: казахский и английский распознаются, цитаты и русский — нет', () => {
+  assert.equal(AI.notRussian('Бірінші жауапта оператор қазақ тілінде сәлемдесіп, өзін Нұрлан деп таныстырды.'), true);
+  assert.equal(AI.notRussian('The operator greeted the client and gave his name.'), true);
+  assert.equal(AI.notRussian('Оператор поздоровался по-казахски: «Сәлеметсіз бе! Мен Нұрланмын.» и представился.'), false, 'казахская цитата в кавычках не считается');
+  assert.equal(AI.notRussian('Оператор ответил «You\'re welcome. Have a good day!» и попрощался.'), false);
+  assert.equal(AI.notRussian('Вежлив.'), false);
+  assert.equal(AI.notRussian(''), false);
+});
+
+test('объяснение не по-русски → переспрос только этого критерия, русский вариант принимается', async () => {
+  const first = goodCriteria();
+  first.c_contact.explanation = 'Бірінші жауапта оператор сәлемдесіп, өзін таныстырды — екі шарт та орындалды.';
+  const fixed = { c_contact: { ...goodCriteria().c_contact, explanation: 'В первом ответе оператор поздоровался и представился.' } };
+  const fr = fakeRouter([{ criteria: first, summary: 'Итог.' }, { criteria: fixed }]);
+  const ai = AI.createAiEvaluator({ apiKey: 'sk-test-key', fetchImpl: fr.fetchImpl });
+  const out = await ai.evaluate(RECORD, CL);
+  assert.equal(fr.calls.length, 2);
+  assert.deepEqual(Object.keys(fr.calls[1].body.response_format.json_schema.schema.properties.criteria.properties), ['c_contact']);
+  assert.match(fr.calls[1].body.messages[fr.calls[1].body.messages.length - 1].content, /не по-русски/);
+  assert.equal(out.answers.c_contact.explanation, 'В первом ответе оператор поздоровался и представился.');
+  assert.deepEqual(out.retried, ['c_contact']);
+});

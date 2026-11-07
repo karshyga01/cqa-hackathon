@@ -183,6 +183,21 @@ function toAnswer(c, raw) {
   };
 }
 
+/* ---------- язык объяснений ---------- */
+
+const KZ_LETTERS = /[ӘәҒғҚқҢңӨөҰұҮүҺһІі]/;
+
+/**
+ * Объяснение должно быть по-русски (цитаты — на языке оригинала, их не считаем).
+ * Казахский узнаём по буквам, которых нет в русском; английский — по отсутствию кириллицы.
+ */
+function notRussian(text) {
+  const s = String(text || '').replace(/«[^»]*»|"[^"]*"|“[^”]*”/g, ' ');
+  const cyr = s.match(/[А-Яа-яЁёӘәҒғҚқҢңӨөҰұҮүҺһІі]+/g) || [];
+  if (!cyr.length) return (s.match(/[A-Za-z]{2,}/g) || []).length >= 3;
+  return cyr.filter((w) => KZ_LETTERS.test(w)).length / cyr.length > 0.2;
+}
+
 /* ---------- отпечаток ---------- */
 
 function sha(obj) { return crypto.createHash('sha256').update(JSON.stringify(obj)).digest('hex').slice(0, 24); }
@@ -430,8 +445,14 @@ function createAiEvaluator({
         summary = String(first.parsed.summary || '').trim();
         for (const c of targets) answers[c.key] = { ...toAnswer(c, first.parsed.criteria[c.key]), fp: fps[c.key] };
 
-        // проверка и один точечный переспрос
+        // проверка и один точечный переспрос (доказательства + язык объяснения)
         const bad = validateAnswers({ criteria: targets }, record.transcript, answers).problems.filter((p) => p.issues.length);
+        const LANG_ISSUE = 'объяснение написано не по-русски — перепиши explanation по-русски, цитаты оставь на языке оригинала';
+        for (const c of targets) {
+          if (!notRussian(answers[c.key].explanation)) continue;
+          const p = bad.find((x) => x.key === c.key);
+          if (p) p.issues.push(LANG_ISSUE); else bad.push({ key: c.key, issues: [LANG_ISSUE] });
+        }
         if (bad.length) {
           const badCrit = targets.filter((c) => bad.some((p) => p.key === c.key));
           const feedback = [
@@ -449,7 +470,7 @@ function createAiEvaluator({
               const candidate = { ...toAnswer(c, second.parsed.criteria[c.key]), fp: fps[c.key], retried: true };
               const before = bad.find((p) => p.key === c.key).issues.length;
               const recheck = validateAnswers({ criteria: [c] }, record.transcript, { [c.key]: candidate }).problems;
-              const after = recheck.length ? recheck[0].issues.length : 0;
+              const after = (recheck.length ? recheck[0].issues.length : 0) + (notRussian(candidate.explanation) ? 1 : 0);
               answers[c.key] = after < before ? candidate : { ...answers[c.key], retried: true };
               retried.push(c.key);
             }
@@ -477,5 +498,5 @@ function createAiEvaluator({
 module.exports = {
   createAiEvaluator, AiError, PROMPT_VERSION,
   // для тестов
-  buildSchema, buildMessages, toAnswer, allowedAnswers, fingerprint, transcriptHash, explainHttp, contentText,
+  buildSchema, buildMessages, toAnswer, allowedAnswers, fingerprint, transcriptHash, explainHttp, contentText, notRussian,
 };
