@@ -1,0 +1,19 @@
+# зависимости
+node_modules/
+
+# ключи и секреты
+.env
+.env.*
+!.env.example
+
+# локальные данные и временные файлы
+data/runtime/
+.playwright-mcp/
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# данные, загруженные при работе (диалоги, оценки)
+data/

@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CQA — оценка качества диалогов</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%23B9DB6A%27/%3E%3Ctext x=%2716%27 y=%2723%27 font-family=%27Arial%27 font-weight=%27800%27 font-size=%2720%27 text-anchor=%27middle%27 fill=%27%230E3B2E%27%3EF%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/cqa.css">
+</head>
+<body class="cqa">
+
+<!-- Иконки (спрайт) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H9l-5 4z"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M5 4h3.5l2 5-2.4 1.5a11 11 0 0 0 5.4 5.4L15 13.5l5 2V19a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M10 6h10M10 12h10M10 18h10"/><path d="M3.5 6l1.5 1.5L7.5 5M3.5 12l1.5 1.5 2.5-2.5M3.5 18l1.5 1.5 2.5-2.5"/></symbol>
+  <symbol id="i-scale" viewBox="0 0 24 24"><path d="M12 4v16M8 20h8M5 7h14"/><path d="M5 7l-3 6a3 3 0 0 0 6 0zM19 7l-3 6a3 3 0 0 0 6 0z"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17v.5"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7.5 3v5.5c0 4.5-3.2 8-7.5 9.5-4.3-1.5-7.5-5-7.5-9.5V6z"/><path d="M8.5 12l2.5 2.5 4.5-4.5"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-drag" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 0 0-14.5-4.5L4 8M4 4v4h4M4 13a8 8 0 0 0 14.5 4.5L20 16M20 20v-4h-4"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17v.5"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6"/></symbol>
+</svg>
+
+<div class="cqa-app">
+
+  <!-- ===================== МЕНЮ ===================== -->
+  <aside class="cqa-nav" aria-label="Главное меню">
+    <a class="cqa-brand" href="#dialogs">
+      <span class="cqa-brand-mark" aria-hidden="true">F</span>
+      <span>
+        <span class="cqa-brand-name">CQA</span>
+        <span class="cqa-brand-sub">Freedom Broker</span>
+      </span>
+    </a>
+
+    <ul class="cqa-nav-list">
+      <li>
+        <a class="cqa-nav-link" href="#dialogs" data-nav="dialogs">
+          <svg class="i"><use href="#i-chat"/></svg>
+          <span class="cqa-nav-text">Диалоги<span class="cqa-nav-hint">Загрузить и оценить</span></span>
+          <span class="cqa-nav-count" id="nav-dialogs-count" hidden>0</span>
+        </a>
+      </li>
+      <li>
+        <a class="cqa-nav-link" href="#checklists" data-nav="checklists">
+          <svg class="i"><use href="#i-list"/></svg>
+          <span class="cqa-nav-text">Чек-листы<span class="cqa-nav-hint">Критерии и веса</span></span>
+        </a>
+      </li>
+      <li>
+        <a class="cqa-nav-link" href="#appeals" data-nav="appeals">
+          <svg class="i"><use href="#i-scale"/></svg>
+          <span class="cqa-nav-text">Апелляции<span class="cqa-nav-hint">Спорные оценки</span></span>
+          <span class="cqa-nav-count" id="nav-appeals-count" title="Ждут решения" hidden>0</span>
+        </a>
+      </li>
+    </ul>
+
+    <div class="cqa-nav-foot">
+      <div class="cqa-role">
+        <div class="cqa-role-label">Я работаю как</div>
+        <div class="cqa-role-switch" role="group" aria-label="Роль">
+          <button type="button" aria-pressed="true" data-role="analyst">Аналитик</button>
+          <button type="button" aria-pressed="false" data-role="reviewer">Проверяющий</button>
+        </div>
+        <p class="cqa-role-note" data-role-note>Аналитик оценивает диалоги и подаёт апелляции.</p>
+      </div>
+      <a class="cqa-nav-help" href="#" data-open="modal-help">
+        <svg class="i i-sm"><use href="#i-help"/></svg>
+        Как пользоваться
+      </a>
+    </div>
+  </aside>
+
+  <main class="cqa-main" id="main">
+
+    <!-- ===================== ДИАЛОГИ ===================== -->
+    <section class="cqa-page" data-page="dialogs" aria-labelledby="h-dialogs">
+      <header class="cqa-head">
+        <div class="cqa-head-text">
+          <h1 id="h-dialogs">Диалоги</h1>
+          <p class="cqa-head-hint">Здесь все чаты и звонки. Нажмите на строку, чтобы открыть переписку и оценку.</p>
+        </div>
+        <div class="cqa-head-actions">
+          <button class="cqa-btn cqa-btn-primary cqa-btn-lg" type="button" data-open="modal-upload">
+            <svg class="i"><use href="#i-upload"/></svg>
+            Загрузить диалоги
+          </button>
+        </div>
+      </header>
+
+      <div class="cqa-steps" data-steps>
+        <div class="cqa-step">
+          <span class="cqa-step-num">1</span>
+          <div>
+            <div class="cqa-step-title">Загрузите диалоги</div>
+            <div class="cqa-step-text">Из API организаторов, файлом или текстом</div>
+          </div>
+        </div>
+        <div class="cqa-step">
+          <span class="cqa-step-num">2</span>
+          <div>
+            <div class="cqa-step-title">Отметьте и нажмите «Оценить»</div>
+            <div class="cqa-step-text">ИИ проверит работу оператора по чек-листу</div>
+          </div>
+        </div>
+        <div class="cqa-step">
+          <span class="cqa-step-num">3</span>
+          <div>
+            <div class="cqa-step-title">Откройте карточку</div>
+            <div class="cqa-step-text">Баллы, объяснения и реплики-доказательства</div>
+          </div>
+        </div>
+        <button class="cqa-steps-close" type="button" aria-label="Скрыть подсказку" data-close-steps>
+          <svg class="i"><use href="#i-x"/></svg>
+        </button>
+      </div>
+
+      <div class="cqa-summary" aria-live="polite">
+        <div class="cqa-sum">
+          <span class="cqa-sum-label">Всего диалогов</span>
+          <span class="cqa-sum-value"><span id="sum-total">0</span> <small id="sum-total-note"></small></span>
+        </div>
+        <div class="cqa-sum">
+          <span class="cqa-sum-label">Оценено</span>
+          <span class="cqa-sum-value"><span id="sum-rated">0</span> <small id="sum-rated-note">из 0</small></span>
+        </div>
+        <div class="cqa-sum">
+          <span class="cqa-sum-label">Средний балл</span>
+          <span class="cqa-sum-value" id="sum-avg">—</span>
+        </div>
+        <div class="cqa-sum cqa-sum-red">
+          <span class="cqa-sum-label">С грубыми ошибками</span>
+          <span class="cqa-sum-value" id="sum-gross">0</span>
+        </div>
+        <div class="cqa-sum cqa-sum-amber">
+          <span class="cqa-sum-label">Ждут решения по апелляции</span>
+          <span class="cqa-sum-value" id="sum-appeals">0</span>
+        </div>
+      </div>
+
+      <div class="cqa-panel">
+        <div class="cqa-filters">
+          <label class="cqa-search">
+            <span class="sr-only">Поиск</span>
+            <svg class="i"><use href="#i-search"/></svg>
+            <input class="cqa-input" type="search" id="dl-q" placeholder="Найти по номеру диалога или словам из переписки" autocomplete="off">
+          </label>
+          <label><span class="sr-only">Набор</span>
+            <select class="cqa-select" id="dl-set">
+              <option value="">Все наборы</option>
+            </select>
+          </label>
+          <label><span class="sr-only">Язык</span>
+            <select class="cqa-select" id="dl-lang">
+              <option value="">Все языки</option><option value="RU">Русский</option><option value="KZ">Казахский</option><option value="EN">Английский</option>
+            </select>
+          </label>
+          <label><span class="sr-only">Канал</span>
+            <select class="cqa-select" id="dl-chan">
+              <option value="">Чаты и звонки</option><option value="agent chat">Только чаты</option><option value="voice call">Только звонки</option>
+            </select>
+          </label>
+          <label><span class="sr-only">Статус</span>
+            <select class="cqa-select" id="dl-status">
+              <option value="">Любой статус</option><option value="new">Не оценён</option><option value="rated">Оценён</option><option value="review">Нужна проверка</option><option value="appeal">На апелляции</option><option value="reviewed">Пересмотрен</option>
+            </select>
+          </label>
+          <label class="cqa-check"><input type="checkbox" id="dl-gross"> Только с грубыми ошибками</label>
+          <button class="cqa-btn-link" type="button" id="dl-reset" hidden style="font-size:13.5px">Сбросить фильтры</button>
+        </div>
+
+        <div class="cqa-bulk" id="dl-bulk" hidden>
+          <span>Выбрано <span class="cqa-bulk-count" id="dl-sel-count">0</span></span>
+          <button class="cqa-btn cqa-btn-dark cqa-btn-sm" type="button" id="dl-evaluate" title="Оценка ИИ, если он подключён (иначе — подставная по правилам). Повторная оценка спрашивает только изменившиеся критерии">
+            <svg class="i i-sm"><use href="#i-spark"/></svg>
+            <span>Оценить выбранные</span>
+          </button>
+          <span class="cqa-help">Пока подставная оценка по правилам (не ИИ) — для проверки экрана</span>
+          <button class="cqa-btn-link" type="button" id="dl-sel-clear" style="font-size:13.5px">Снять выделение</button>
+        </div>
+
+        <div class="cqa-table-wrap">
+          <table class="cqa-table">
+            <thead>
+              <tr>
+                <th class="col-check"><label class="cqa-check"><input type="checkbox" id="dl-sel-all" aria-label="Выбрать все на странице"></label></th>
+                <th><button class="cqa-sort" type="button" data-sort="id">Диалог</button></th>
+                <th><button class="cqa-sort" type="button" data-sort="channel">Канал</button></th>
+                <th><button class="cqa-sort" type="button" data-sort="language">Язык</button></th>
+                <th class="col-num"><button class="cqa-sort" type="button" data-sort="turns">Реплик</button></th>
+                <th class="col-num"><button class="cqa-sort" type="button" data-sort="duration">Длительность</button></th>
+                <th>Итог</th>
+                <th>Грубые ошибки</th>
+                <th>Статус</th>
+              </tr>
+            </thead>
+            <tbody id="dl-body">
+              <tr class="cqa-row-state"><td colspan="9"><span class="cqa-spin" aria-hidden="true"></span> Загружаю список…</td></tr>
+            </tbody>
+
+          </table>
+        </div>
+
+        <div class="cqa-table-foot">
+          <span id="dl-range"></span>
+          <nav class="cqa-pager" id="dl-pager" aria-label="Страницы"></nav>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== КАРТОЧКА ДИАЛОГА ===================== -->
+    <section class="cqa-page" data-page="dialog" aria-labelledby="cd-title">
+      <div class="cqa-card-top">
+        <a class="cqa-back" href="#dialogs"><svg class="i i-sm"><use href="#i-left"/></svg>Все диалоги</a>
+        <nav class="cqa-card-nav" aria-label="Соседние диалоги">
+          <button class="cqa-btn cqa-btn-ghost cqa-btn-sm" type="button" id="cd-prev" title="Предыдущий диалог (←)"><svg class="i i-sm"><use href="#i-left"/></svg>Предыдущий</button>
+          <span class="cqa-card-pos" id="cd-pos"></span>
+          <button class="cqa-btn cqa-btn-ghost cqa-btn-sm" type="button" id="cd-next" title="Следующий диалог (→)">Следующий<svg class="i i-sm" style="transform:rotate(180deg)"><use href="#i-left"/></svg></button>
+        </nav>
+      </div>
+
+      <header class="cqa-head">
+        <div class="cqa-head-text">
+          <h1 id="cd-title">Загружаю диалог…</h1>
+          <div class="cqa-meta" id="cd-meta"></div>
+        </div>
+      </header>
+
+      <div id="cd-state" class="cqa-panel cqa-card-state"></div>
+
+      <!-- Плеер звонка: дорожки «кто когда говорил», перемотка, скорость -->
+      <div class="cqa-player2" id="cd-player" aria-label="Запись звонка" hidden></div>
+
+      <div class="cqa-card-grid" id="cd-grid" hidden>
+        <div class="cqa-panel cqa-tx">
+          <div class="cqa-panel-head cqa-tx-head">
+            <h2 id="cd-tx-title">Переписка</h2>
+            <div class="cqa-tx-legend">
+              <span><i class="cqa-sw cqa-sw-client"></i>Клиент</span>
+              <span><i class="cqa-sw cqa-sw-op"></i>Оператор</span>
+              <span><i class="cqa-sw cqa-sw-bot"></i>Бот и система — контекст</span>
+            </div>
+          </div>
+          <div class="cqa-tx-body" id="cd-tx"></div>
+        </div>
+        <aside class="cqa-result" id="cd-side" aria-label="Оценка и сводка"></aside>
+      </div>
+
+      <!-- Образец будущей панели оценки (шаг 6). Не отображается. -->
+      <template id="tpl-card-mock">
+    <div>
+      <a class="cqa-back" href="#dialogs"><svg class="i i-sm"><use href="#i-left"/></svg>Все диалоги</a>
+
+      <header class="cqa-head">
+        <div class="cqa-head-text">
+          <h1 id="h-dialog"><span class="cqa-tx-chat">Чат p1-ru-001</span><span class="cqa-tx-call">Звонок v1-ru-001</span></h1>
+          <div class="cqa-meta">
+            <span class="cqa-chip cqa-chip-outline cqa-tx-chat"><svg class="i"><use href="#i-chat"/></svg>Чат с сайта</span>
+            <span class="cqa-chip cqa-chip-outline cqa-tx-call"><svg class="i"><use href="#i-phone"/></svg>Телефонный звонок</span>
+            <span class="cqa-chip cqa-chip-outline">Русский</span>
+            <span class="cqa-chip cqa-chip-outline cqa-tx-chat"><svg class="i"><use href="#i-clock"/></svg>05:31</span>
+            <span class="cqa-chip cqa-chip-outline cqa-tx-call"><svg class="i"><use href="#i-clock"/></svg>06:33</span>
+            <span class="cqa-chip cqa-chip-amber"><span class="cqa-dot"></span>На апелляции</span>
+          </div>
+        </div>
+        <div class="cqa-head-actions">
+          <label class="cqa-field">
+            <span class="cqa-label">Чек-лист</span>
+            <select class="cqa-select" style="min-width:230px">
+              <option>Качество чатов, версия 1</option>
+              <option>Качество звонков (черновик)</option>
+            </select>
+          </label>
+          <button class="cqa-btn cqa-btn-ghost" type="button" style="align-self:flex-end">
+            <svg class="i"><use href="#i-refresh"/></svg>
+            Оценить заново
+          </button>
+          <button class="cqa-btn cqa-btn-danger" type="button" style="align-self:flex-end" data-open="modal-appeal">
+            <svg class="i"><use href="#i-scale"/></svg>
+            Оспорить оценку
+          </button>
+        </div>
+      </header>
+
+      <!-- Плеер (только для звонков) -->
+      <div class="cqa-player" aria-label="Запись звонка">
+        <div class="cqa-wave-row">
+          <span class="cqa-wave-who">Клиент</span>
+          <div class="cqa-wave-track">
+            <div class="cqa-wave" data-wave="client" data-seed="7"></div>
+            <span class="cqa-wave-mark" style="left:31%;width:9%"></span>
+          </div>
+        </div>
+        <div class="cqa-wave-row">
+          <span class="cqa-wave-who">Оператор</span>
+          <div class="cqa-wave-track">
+            <div class="cqa-wave is-operator" data-wave="operator" data-seed="3"></div>
+            <span class="cqa-wave-mark" style="left:31%;width:9%"></span>
+          </div>
+        </div>
+        <div class="cqa-play-row">
+          <button class="cqa-play-btn" type="button" aria-label="Слушать запись">
+            <svg class="i i-fill"><use href="#i-play"/></svg>
+          </button>
+          <div class="cqa-seek" role="slider" aria-label="Позиция записи" aria-valuemin="0" aria-valuemax="393" aria-valuenow="138" tabindex="0">
+            <div class="cqa-seek-fill" style="width:35%"></div>
+            <div class="cqa-seek-knob" style="left:35%"></div>
+          </div>
+          <span class="cqa-time">02:18 / 06:33</span>
+        </div>
+        <div class="cqa-player-foot">
+          <span>Зелёная зона на дорожке — фрагмент, на который ссылается оценка. Нажмите на реплику, чтобы перемотать запись.</span>
+          <a href="#" class="cqa-btn-link" style="display:inline-flex;gap:6px;align-items:center"><svg class="i i-sm"><use href="#i-link"/></svg>Открыть запись в плеере</a>
+        </div>
+      </div>
+
+      <div class="cqa-card-grid">
+
+        <!-- Переписка -->
+        <div class="cqa-panel cqa-tx">
+          <div class="cqa-panel-head cqa-tx-head">
+            <h2><span class="cqa-tx-chat">Переписка</span><span class="cqa-tx-call">Расшифровка звонка</span></h2>
+            <div class="cqa-tx-legend">
+              <span><i class="cqa-sw cqa-sw-client"></i>Клиент</span>
+              <span><i class="cqa-sw cqa-sw-op"></i>Оператор</span>
+              <span><i class="cqa-sw cqa-sw-ev"></i>Доказательство</span>
+              <span><i class="cqa-sw cqa-sw-miss"></i>Пропущено</span>
+            </div>
+          </div>
+
+          <!-- чат -->
+          <div class="cqa-tx-body cqa-tx-chat" data-tx>
+            <div class="cqa-msg is-context is-system" id="m1">
+              <div class="cqa-msg-bubble">00:00 — Клиент начал чат на сайте</div>
+            </div>
+            <div class="cqa-msg is-context" id="m2">
+              <div class="cqa-msg-meta"><span class="cqa-msg-who">Бот</span><span>00:01</span><span class="cqa-msg-ctx">контекст, не оценивается</span></div>
+              <div class="cqa-msg-bubble">Здравствуйте! Я виртуальный помощник Freedom Broker. Опишите ваш вопрос, и я соединю вас со специалистом.</div>
+            </div>
+            <div class="cqa-msg is-client is-evidence" id="m3">
+              <div class="cqa-msg-meta"><span class="cqa-msg-who">Клиент</span><span>00:15</span></div>
+              <div class="cqa-msg-bubble">Хочу вывести деньги с брокерского счёта, а заявка висит уже третий день</div>
+              <div class="cqa-ev-tags"><button class="cqa-ev-tag is-na" type="button" data-crit="c02">02 Выявление потребности: N/A</button></div>
+            </div>
+            <div class="cqa-msg is-context is-system" id="m4">
+              <div class="cqa-msg-bubble">00:16 — Диалог передан оператору</div>
+            </div>
+            <div class="cqa-msg is-operator is-evidence" id="m5">
+              <div class="cqa-msg-meta"><span>00:48</span><span class="cqa-msg-who">Оператор</span></div>
+              <div class="cqa-msg-bubble">Здравствуйте! Меня зовут Айгерим, я специалист поддержки Freedom Broker. Понимаю, три дня ожидания — это неприятно, сейчас разберёмся.</div>
+              <div class="cqa-ev-tags">
+                <button class="cqa-ev-tag" type="button" data-crit="c01">01 Контакт: Да</button>
+                <button class="cqa-ev-tag" type="button" data-crit="c05">05 Эмпатия: Да</button>
+              </div>
+            </div>
+            <div class="cqa-msg is-operator" id="m6">
+              <div class="cqa-msg-meta"><span>01:05</span><span class="cqa-msg-who">Оператор</span></div>
+              <div class="cqa-msg-bubble">Чтобы посмотреть заявку, мне нужно подтвердить вашу личность. Назовите, пожалуйста, номер договора и последние 4 цифры телефона из анкеты.</div>
+            </div>
+            <div class="cqa-msg is-client" id="m7">
+              <div class="cqa-msg-meta"><span class="cqa-msg-who">Клиент</span><span>01:40</span></div>
+              <div class="cqa-msg-bubble">Договор 7712-0453, телефон заканчивается на 2290</div>
+            </div>
+            <div class="cqa-msg is-context is-system is-evidence" id="m8">
+              <div class="cqa-msg-bubble">01:52 — Клиент идентифицирован: договор и телефон совпадают</div>
+              <div class="cqa-ev-tags" style="justify-content:center"><button class="cqa-ev-tag" type="button" data-crit="c03">03 Идентификация: Да</button></div>
+            </div>
+            <div class="cqa-msg is-operator is-evidence" id="m9">
+              <div class="cqa-msg-meta"><span>02:10</span><span class="cqa-msg-who">Оператор</span></div>
+              <div class="cqa-msg-bubble">Спасибо! Проверяю заявку, это займёт около двух минут.</div>
+              <div class="cqa-ev-tags"><button class="cqa-ev-tag" type="button" data-crit="c06">06 Ведение диалога: 10 из 10</button></div>
+            </div>
+            <div class="cqa-msg is-operator" id="m10">
+              <div class="cqa-msg-meta"><span>04:02</span><span class="cqa-msg-who">Оператор</span></div>
+              <div class="cqa-msg-bubble">Заявка на вывод 450 000 ₸ остановлена: в реквизитах указан счёт на имя другого человека. Вывести деньги можно только на счёт владельца договора.</div>
+            </div>
+            <div class="cqa-msg is-client" id="m11">
+              <div class="cqa-msg-meta"><span class="cqa-msg-who">Клиент</span><span>04:30</span></div>
+              <div class="cqa-msg-bubble">А что мне теперь делать?</div>
+            </div>
+            <div class="cqa-msg is-operator is-evidence" id="m12">
+              <div class="cqa-msg-meta"><span>04:41</span><span class="cqa-msg-who">Оператор</span></div>
+              <div class="cqa-msg-bubble">Создайте новую заявку и укажите счёт, открытый на ваше имя. Деньги обычно поступают в течение одного рабочего дня.</div>
+              <div class="cqa-ev-tags"><button class="cqa-ev-tag is-no" type="button" data-crit="c04">04 Консультация: 15 из 20</button></div>
+            </div>
+            <div class="cqa-msg is-client" id="m13">
+              <div class="cqa-msg-meta"><span class="cqa-msg-who">Клиент</span><span>05:10</span></div>
+              <div class="cqa-msg-bubble">Понял, спасибо</div>
+            </div>
+            <div class="cqa-miss" id="miss-07">
+              <svg class="i"><use href="#i-target"/></svg>
+              <div>
+                <strong>Здесь ожидалось прощание</strong>
+                <p>Критерий 07 «Завершение»: оператор не подвёл итог, не предложил помощь и не попрощался.</p>
+              </div>
+            </div>
+            <div class="cqa-msg is-context is-system is-evidence" id="m14">
+              <div class="cqa-msg-bubble">05:31 — Чат закрыт оператором</div>
+              <div class="cqa-ev-tags" style="justify-content:center"><button class="cqa-ev-tag is-no" type="button" data-crit="c07">07 Завершение: Нет</button></div>
+            </div>
+          </div>
+
+          <!-- звонок -->
+          <div class="cqa-tx-body cqa-tx-call">
+            <div class="cqa-msg is-context is-system">
+              <div class="cqa-msg-bubble" title="2026-11-05T10:14:03+05:00">00:00 — Звонок принят оператором</div>
+            </div>
+            <div class="cqa-msg is-operator is-evidence">
+              <div class="cqa-msg-meta"><span title="2026-11-05T10:14:05+05:00">00:02</span><span class="cqa-msg-who">Оператор</span></div>
+              <div class="cqa-msg-bubble">Добрый день, Freedom Broker, меня зовут Ерлан. Чем могу помочь?</div>
+              <div class="cqa-ev-tags"><button class="cqa-ev-tag" type="button" data-crit="c01">01 Контакт: Да</button></div>
+            </div>
+            <div class="cqa-msg is-client">
+              <div class="cqa-msg-meta"><span class="cqa-msg-who">Клиент</span><span title="2026-11-05T10:16:11+05:00">02:08</span></div>
+              <div class="cqa-msg-bubble">Когда я получу ответ по обращению?</div>
+            </div>
+            <div class="cqa-msg is-operator is-evidence">
+              <div class="cqa-msg-meta"><span title="2026-11-05T10:16:21+05:00">02:18</span><span class="cqa-msg-who">Оператор</span></div>
+              <div class="cqa-msg-bubble">Я передам вопрос специалистам.</div>
+              <div class="cqa-ev-tags"><button class="cqa-ev-tag is-no" type="button" data-crit="c04">04 Консультация: 15 из 20</button></div>
+            </div>
+            <div class="cqa-msg is-client">
+              <div class="cqa-msg-meta"><span class="cqa-msg-who">Клиент</span><span title="2026-11-05T10:16:30+05:00">02:27</span></div>
+              <div class="cqa-msg-bubble">А сколько времени это займёт?</div>
+            </div>
+            <div class="cqa-msg is-operator">
+              <div class="cqa-msg-meta"><span title="2026-11-05T10:16:38+05:00">02:35</span><span class="cqa-msg-who">Оператор</span></div>
+              <div class="cqa-msg-bubble">Обычно отвечают в течение суток, точнее сказать не могу.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Результат оценки -->
+        <div class="cqa-result">
+
+          <div class="cqa-total">
+            <div class="cqa-total-top">
+              <div>
+                <div class="cqa-total-label">Итоговый балл</div>
+                <div class="cqa-total-num"><b>88,24</b><span>из 100</span></div>
+                <div class="cqa-total-grade">Хорошо. Снижено за консультацию и завершение.</div>
+              </div>
+              <div class="cqa-total-side">
+                <span class="cqa-chip cqa-chip-outline">Оценка ИИ, 7 ноября 13:02</span>
+                <span class="cqa-chip cqa-chip-outline">Чек-лист: качество чатов, v1</span>
+              </div>
+            </div>
+
+            <div class="cqa-contrib" aria-label="Вклад критериев в итог">
+              <div class="cqa-contrib-bar">
+                <div class="cqa-contrib-seg" style="flex:11.76" title="01 Контакт: 11,76 из 11,76"><i style="width:100%"></i><span>01</span></div>
+                <div class="cqa-contrib-seg" style="flex:23.53" title="03 Идентификация: 23,53 из 23,53"><i style="width:100%"></i><span>03</span></div>
+                <div class="cqa-contrib-seg is-partial" style="flex:23.53" title="04 Консультация: 17,65 из 23,53"><i style="width:75%"></i><span>04</span></div>
+                <div class="cqa-contrib-seg" style="flex:17.65" title="05 Эмпатия: 17,65 из 17,65"><i style="width:100%"></i><span>05</span></div>
+                <div class="cqa-contrib-seg" style="flex:17.65" title="06 Ведение диалога: 17,65 из 17,65"><i style="width:100%"></i><span>06</span></div>
+                <div class="cqa-contrib-seg is-zero" style="flex:5.88" title="07 Завершение: 0 из 5,88"><span>07</span></div>
+              </div>
+              <div class="cqa-contrib-legend">
+                <span><i class="cqa-sw" style="background:var(--leaf);border-color:var(--leaf)"></i>Получено</span>
+                <span><i class="cqa-sw" style="background:#DCE7E0"></i>Потеряно</span>
+                <span><i class="cqa-sw" style="background:var(--red-soft);border-color:#EBC3BA"></i>Ноль баллов</span>
+              </div>
+              <div class="cqa-contrib-na">
+                <span class="cqa-contrib-na-sw" aria-hidden="true"></span>
+                Критерий 02 не применим (N/A). Его вес 15 разделён между остальными, максимум остался 100.
+              </div>
+            </div>
+
+            <details class="cqa-how">
+              <summary><svg class="i i-sm"><use href="#i-help"/></svg>Как считается итог</summary>
+              <ul>
+                <li>«Да» даёт полный вес критерия, «Нет» — ноль.</li>
+                <li>Шкала пересчитывается пропорционально: 15 из 20 — это 75% веса.</li>
+                <li>N/A не учитывается, а его вес делится между остальными критериями.</li>
+                <li>Итог округляется до двух знаков. Грубые ошибки отмечаются отдельно и в баллы не входят.</li>
+              </ul>
+            </details>
+          </div>
+
+          <div class="cqa-gross" role="status">
+            <span class="cqa-gross-icon"><svg class="i"><use href="#i-shield"/></svg></span>
+            <div>
+              <b>Грубых ошибок нет</b>
+              <p>Проверено: оскорбления клиента, предложение услуг в обход компании, раскрытие конфиденциальных данных.</p>
+            </div>
+          </div>
+
+          <!-- Секция 1 -->
+          <div class="cqa-section">
+            <div class="cqa-section-head">
+              <span class="cqa-section-name">Начало и понимание запроса</span>
+              <span class="cqa-section-score">11,76 <small>из 11,76</small></span>
+            </div>
+
+            <details class="cqa-crit" id="c01">
+              <summary>
+                <span class="cqa-crit-no">01</span>
+                <span class="cqa-crit-name">Установление контакта</span>
+                <span class="cqa-ans cqa-ans-yes"><svg class="i i-sm"><use href="#i-check"/></svg>Да</span>
+                <span class="cqa-crit-pts">11,76 <small>/ 11,76</small></span>
+                <svg class="i i-sm cqa-crit-chev"><use href="#i-chev"/></svg>
+              </summary>
+              <div class="cqa-crit-body">
+                <p class="cqa-crit-why">Оператор поздоровался по-русски, как и клиент, и назвал своё имя в первом же ответе.</p>
+                <div class="cqa-quote">
+                  <span class="cqa-quote-meta">Оператор, 00:48</span>
+                  <span class="cqa-quote-text">«Здравствуйте! Меня зовут Айгерим, я специалист поддержки Freedom Broker…»</span>
+                </div>
+                <div class="cqa-crit-foot">
+                  <span>Вес 10, после перераспределения 11,76</span>
+                  <div class="cqa-crit-actions">
+                    <button class="cqa-btn cqa-btn-ghost cqa-btn-sm" type="button" data-jump="m5"><svg class="i i-sm"><use href="#i-target"/></svg>Показать в переписке</button>
+                    <button class="cqa-btn cqa-btn-ghost cqa-btn-sm" type="button" data-open="modal-appeal">Оспорить</button>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <details class="cqa-crit" id="c02" open>
+              <summary>
+                <span class="cqa-crit-no">02</span>
+                <span class="cqa-crit-name">Выявление потребности</span>
+                <span class="cqa-ans cqa-ans-na">N/A</span>
+                <span class="cqa-crit-pts"><small>не учитывается</small></span>
+                <svg class="i i-sm cqa-crit-chev"><use href="#i-chev"/></svg>
+              </summary>
+              <div class="cqa-crit-body">
+                <p class="cqa-crit-why">Критерий не применим: клиент сразу назвал проблему — заявка на вывод висит третий день. Чтобы ответить, достаточно было проверить заявку, уточнять детали запроса не требовалось.</p>
+                <div class="cqa-quote is-na">
+                  <span class="cqa-quote-meta">Условие N/A выполнено: данных для ответа хватало с самого начала</span>
+                  <span class="cqa-quote-text">Клиент, 00:15: «Хочу вывести деньги с брокерского счёта, а заявка висит уже третий день»</span>
+                </div>
+                <div class="cqa-crit-foot">
+                  <span>Вес 15 разделён между применимыми критериями</span>
+                  <div class="cqa-crit-actions">
+                    <button class="cqa-btn cqa-btn-ghost cqa-btn-sm" type="button" data-jump="m3"><svg class="i i-sm"><use href="#i-target"/></svg>Показать в переписке</button>
+                    <button class="cqa-btn cqa-btn-ghost cqa-btn-sm" type="button" data-open="modal-appeal">Оспорить</button>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <!-- Секция 2 -->
+          <div class="cqa-section">
+            <div class="cqa-section-head">
+              <span class="cqa-section-name">Безопасность и решение</span>
+              <span class="cqa-section-score">41,18 <small>из 47,06</small></span>
+            </div>
+
+            <details class="cqa-crit" id="c03">
+              <summary>
+                <span class="cqa-crit-no">03</span>
+                <span class="cqa-crit-name">Идентификация</span>
+                <span class="cqa-ans cqa-ans-yes"><svg class="i i-sm"><use href="#i-check"/></svg>Да</span>
+                <span class="cqa-crit-pts">23,53 <small>/ 23,53</small></span>
+                <svg class="i i-sm cqa-crit-chev"><use href="#i-chev"/></svg>
+              </summary>
+              <div class="cqa-crit-body">
+                <p class="cqa-crit-why">Оператор запросил договор и телефон до того, как смотреть заявку. Система подтвердила личность раньше, чем оператор раскрыл детали.</p>
+                <div class="cqa-quote">
+                  <span class="cqa-quote-meta">Системное сообщение, 01:52</span>
+                  <span class="cqa-quote-text">«Клиент идентифицирован: договор и телефон совпадают»</span>
+                </div>
+                <div class="cqa-crit-foot">
+                  <span>Вес 20, после перераспределения 23,53</span>
+                  <div class="cqa-crit-actions">
+                    <button class="cqa-btn cqa-btn-ghost cqa-btn-sm" type="button" data-jump="m8"><svg class="i i-sm"><use href="#i-target"/></svg>Показать в переписке</button>
+                    <button class="cqa-btn cqa-btn-ghost cqa-btn-sm" type="button" data-open="modal-appeal">Оспорить</button>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <details class="cqa-crit" id="c04" open>
+              <summary>
+                <span class="cqa-crit-no">04</span>
+                <span class="cqa-crit-name">Корректная и полная консультация</span>
+                <span class="cqa-ans cqa-ans-scale">15 из 20</span>
+                <span class="cqa-crit-pts">17,65 <small>/ 23,53</small></span>
+                <svg class="i i-sm cqa-crit-chev"><use href="#i-chev"/></svg>
+              </summary>
+              <div class="cqa-crit-body">
+                <p class="cqa-crit-why">Основной вопрос решён: оператор объяснил причину и что делать. Пропущена деталь — не сказал, что старую заявку нужно отменить и где это сделать.</p>
+                <div class="cqa-quote">
+                  <span class="cqa-quote-meta">Оператор, 04:41</span>
+                  <span class="cqa-quote-text">«Создайте новую заявку и укажите счёт, открытый на ваше имя…»</span>
+                </div>
+                <div class="cqa-crit-foot">
+                  <span>Ступень 15: «основной вопрос решён, пропущена второстепенная деталь»</span>
+                  <div class="cqa-crit-actions">
+                    <button class="cqa-btn cqa-btn-ghost cqa-btn-sm" type="button" data-jump="m12"><svg class="i i-sm"><use href="#i-target"/></svg>Показать в переписке</button>
+                    <button class="cqa-btn cqa-btn-ghost cqa-btn-sm" type="button" data-open="modal-appeal">Оспорить</button>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <!-- Секция 3 -->
+          <div class="cqa-section">
+            <div class="cqa-section-head">
+              <span class="cqa-section-name">Ведение и завершение диалога</span>
+              <span class="cqa-section-score">35,29 <small>из 41,18</small></span>
+            </div>
+
+            <details class="cqa-crit" id="c05">
+              <summary>
+                <span class="cqa-crit-no">05</span>
+                <span class="cqa-crit-name">Эмпатия и клиентоориентированность</span>
+                <span class="cqa-ans cqa-ans-yes"><svg class="i i-sm"><use href="#i-check"/></svg>Да</span>
+                <span class="cqa-crit-pts">17,65 <small>/ 17,65</small></span>
+                <svg class="i i-sm cqa-crit-chev"><use href="#i-chev"/></svg>
+              </summary>
+              <div class="cqa-crit-body">
+                <p class="cqa-crit-why">Клиент пожаловался на долгое ожидание. Оператор отреагировал именно на это и пообещал разобраться.</p>
+                <div class="cqa-quote">
+                  <span class="cqa-quote-meta">Оператор, 00:48</span>
+                  <span class="cqa-quote-text">«Понимаю, три дня ожидания — это неприятно, сейчас разберёмся»</span>
+                </div>
+                <div class="cqa-crit-foot">
+                  <span>Вес 15, после перераспределения 17,65</span>
+                  <div class="cqa-crit-actions">
+                    <button class="cqa-btn cqa-btn-ghost cqa-btn-sm" type="button" data-jump="m5"><svg class="i i-sm"><use href="#i-target"/></svg>Показать в переписке</button>
+                    <button class="cqa-btn cqa-btn-ghost cqa-btn-sm" type="button" data-open="modal-appeal">Оспорить</button>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <details class="cqa-crit" id="c06">
+              <summary>
+                <span class="cqa-crit-no">06</span>
+                <span class="cqa-crit-name">Управление диалогом, скорость и грамотность</span>
+                <span class="cqa-ans cqa-ans-scale is-full">10 из 10</span>
+                <span class="cqa-crit-pts">17,65 <small>/ 17,65</small></span>
+                <svg class="i i-sm cqa-crit-chev"><use href="#i-chev"/></svg>
+              </summary>
+              <div class="cqa-crit-body">
+                <p class="cqa-crit-why">Ответы понятные и идут по порядку. Перед проверкой заявки оператор предупредил, что это займёт около двух минут.</p>
+                <div class="cqa-quote">
+                  <span class="cqa-quote-meta">Оператор, 02:10</span>
+                  <span class="cqa-quote-text">«Проверяю заявку, это займёт около двух минут»</span>
+                </div>
+                <div class="cqa-crit-foot">
+                  <span>Ступень 10: «ответы ясные, об ожидании предупредил»</span>
+                  <div class="cqa-crit-actions">
+                    <button class="cqa-btn cqa-btn-ghost cqa-btn-sm" type="button" data-jump="m9"><svg class="i i-sm"><use href="#i-target"/></svg>Показать в переписке</button>
+                    <button class="cqa-btn cqa-btn-ghost cqa-btn-sm" type="button" data-open="modal-appeal">Оспорить</button>
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <details class="cqa-crit" id="c07" open>
+              <summary>
+                <span class="cqa-crit-no">07</span>
+                <span class="cqa-crit-name">Завершение</span>
+                <span class="cqa-ans cqa-ans-no"><svg class="i i-sm"><use href="#i-x"/></svg>Нет</span>
+                <span class="cqa-crit-pts">0 <small>/ 5,88</small></span>
+                <svg class="i i-sm cqa-crit-chev"><use href="#i-chev"/></svg>
+              </summary>
+              <div class="cqa-crit-body">
+                <p class="cqa-crit-why">После ответа на вопрос оператор закрыл чат без прощания и не предложил помощь. Основание — последняя реплика клиента и сообщение о закрытии чата.</p>
+                <div class="cqa-quote is-miss">
+                  <span class="cqa-quote-meta">Проверенный участок: 05:10 – 05:31</span>
+                  <span class="cqa-quote-text">Клиент: «Понял, спасибо» → Система: «Чат закрыт оператором». Прощания между ними нет.</span>
+                </div>
+                <div class="cqa-appeal-note">
+                  <svg class="i"><use href="#i-scale"/></svg>
+                  <p><b>Апелляция подана 7 ноября в 13:20.</b> Ждёт решения проверяющего.</p>
+                </div>
+                <div class="cqa-crit-foot">
+                  <span>Вес 5, после перераспределения 5,88</span>
+                  <div class="cqa-crit-actions">
+                    <button class="cqa-btn cqa-btn-ghost cqa-btn-sm" type="button" data-jump="miss-07"><svg class="i i-sm"><use href="#i-target"/></svg>Показать в переписке</button>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <!-- Грубые нарушения -->
+          <div class="cqa-section">
+            <div class="cqa-section-head">
+              <span class="cqa-section-name">Грубые нарушения</span>
+              <span class="cqa-section-score"><small>без баллов</small></span>
+            </div>
+            <details class="cqa-crit" id="c08">
+              <summary>
+                <span class="cqa-crit-no">08</span>
+                <span class="cqa-crit-name">Грубые ошибки</span>
+                <span class="cqa-ans cqa-ans-yes">Нет</span>
+                <span class="cqa-crit-pts"><small>флаг</small></span>
+                <svg class="i i-sm cqa-crit-chev"><use href="#i-chev"/></svg>
+              </summary>
+              <div class="cqa-crit-body">
+                <p class="cqa-crit-why">Ни одного из трёх нарушений не найдено: оператор не грубил, не предлагал перевести деньги ему лично или консультацию в частном порядке и не раскрывал чужие данные.</p>
+              </div>
+            </details>
+          </div>
+
+          <!-- История -->
+          <div class="cqa-panel">
+            <div class="cqa-panel-head"><h3>История оценки</h3></div>
+            <div class="cqa-panel-body">
+              <ol class="cqa-history">
+                <li>
+                  <span class="cqa-history-dot"><svg class="i i-sm"><use href="#i-check"/></svg></span>
+                  <div><b>Исходная оценка ИИ: 88,24</b><p>7 ноября, 13:02. Чек-лист «Качество чатов», версия 1.</p></div>
+                </li>
+                <li>
+                  <span class="cqa-history-dot is-wait"><svg class="i i-sm"><use href="#i-scale"/></svg></span>
+                  <div><b>Апелляция по критерию 07 «Завершение»</b><p>Подал аналитик 7 ноября, 13:20. Ждёт проверяющего.</p></div>
+                </li>
+                <li>
+                  <span class="cqa-history-dot is-todo"><svg class="i i-sm"><use href="#i-clock"/></svg></span>
+                  <div><b>Финальный итог</b><p>Появится после решения проверяющего.</p></div>
+                </li>
+              </ol>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+      </template>
+    </section>
+
+    <!-- ===================== ЧЕК-ЛИСТЫ ===================== -->
+    <section class="cqa-page" data-page="checklists" aria-labelledby="h-cl">
+      <header class="cqa-head">
+        <div class="cqa-head-text">
+          <h1 id="h-cl">Чек-листы</h1>
+          <p class="cqa-head-hint">Чек-лист — это правила, по которым ИИ ставит баллы. Меняйте критерии и веса, затем сохраните: каждое сохранение — новая версия, старые оценки не пострадают.</p>
+        </div>
+      </header>
+
+      <div class="cqa-cl-grid">
+        <div class="cqa-cl-side">
+          <div class="cqa-cl-list" id="cl-list" aria-label="Чек-листы"></div>
+          <button class="cqa-cl-new" type="button" id="cl-new"><svg class="i"><use href="#i-plus"/></svg>Новый чек-лист</button>
+        </div>
+        <div class="cqa-cl-main" id="cl-editor">
+          <div class="cqa-panel"><div class="cqa-empty"><span class="cqa-spin" aria-hidden="true"></span><p>Загружаю чек-листы…</p></div></div>
+        </div>
+      </div>
+
+      <div class="cqa-savebar" id="cl-savebar" hidden>
+        <p id="cl-savebar-text"></p>
+        <div class="cqa-savebar-actions">
+          <button class="cqa-btn cqa-btn-ghost" type="button" id="cl-discard">Отменить изменения</button>
+          <button class="cqa-btn cqa-btn-primary" type="button" id="cl-save"><svg class="i"><use href="#i-check"/></svg><span id="cl-save-text">Сохранить</span></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== АПЕЛЛЯЦИИ ===================== -->
+    <section class="cqa-page" data-page="appeals" aria-labelledby="h-ap">
+      <header class="cqa-head">
+        <div class="cqa-head-text">
+          <h1 id="h-ap">Апелляции</h1>
+          <p class="cqa-head-hint">Спорные оценки. Проверяющий смотрит оценку ИИ, комментарий и фрагмент диалога, а затем оставляет или меняет оценку.</p>
+        </div>
+      </header>
+
+      <div class="cqa-tabs" role="tablist" id="ap-tabs" aria-label="Фильтр апелляций">
+        <button class="cqa-tab" role="tab" aria-selected="true" type="button" data-ap-tab="open">Ждут решения <span class="cqa-tab-count" data-ap-count="open">0</span></button>
+        <button class="cqa-tab" role="tab" aria-selected="false" type="button" data-ap-tab="decided">Решённые <span class="cqa-tab-count" data-ap-count="decided">0</span></button>
+        <button class="cqa-tab" role="tab" aria-selected="false" type="button" data-ap-tab="all">Все <span class="cqa-tab-count" data-ap-count="all">0</span></button>
+      </div>
+
+      <div class="cqa-ap-grid" id="ap-grid">
+        <div class="cqa-ap-list" id="ap-list" aria-label="Список апелляций"></div>
+        <div class="cqa-panel" id="ap-detail" aria-live="polite"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ===================== ОКНО: ЗАГРУЗКА ===================== -->
+<div class="cqa-modal" id="modal-upload" role="dialog" aria-modal="true" aria-labelledby="mu-title">
+  <form class="cqa-dialog" id="up-form" novalidate>
+    <div class="cqa-dialog-head">
+      <div>
+        <h2 id="mu-title">Загрузить диалоги</h2>
+        <p>Выберите, откуда взять транскрипты. Чаты и звонки на русском, казахском и английском.</p>
+      </div>
+      <button class="cqa-icon-btn" type="button" aria-label="Закрыть" data-close><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="cqa-dialog-body">
+      <div class="cqa-seg" role="tablist" data-src-tabs>
+        <button type="button" role="tab" aria-selected="true" data-src="api">Из API организаторов</button>
+        <button type="button" role="tab" aria-selected="false" data-src="file">Файл</button>
+        <button type="button" role="tab" aria-selected="false" data-src="paste">Вставить текст</button>
+      </div>
+
+      <!-- Из API -->
+      <div class="cqa-src-pane is-active" data-pane="api">
+        <div class="cqa-up-row">
+          <label class="cqa-field">
+            <span class="cqa-label">Код набора (group_id)</span>
+            <input class="cqa-input" id="up-group" value="DEV" autocomplete="off" spellcheck="false">
+          </label>
+          <button class="cqa-btn cqa-btn-ghost" type="button" id="up-check">Проверить</button>
+        </div>
+        <span class="cqa-help">DEV — набор для разработки. Код контрольного набора сообщат организаторы.</span>
+      </div>
+
+      <!-- Файл -->
+      <div class="cqa-src-pane" data-pane="file">
+        <label class="cqa-drop" id="up-drop">
+          <input type="file" id="up-file" accept=".json,application/json" class="sr-only">
+          <span class="cqa-drop-icon"><svg class="i"><use href="#i-file"/></svg></span>
+          <b id="up-file-title">Перетащите файл сюда</b>
+          <span id="up-file-sub">или <span class="cqa-btn-link">выберите на компьютере</span></span>
+          <span class="cqa-help">JSON в формате API организаторов, массив диалогов или один диалог</span>
+        </label>
+        <label class="cqa-field">
+          <span class="cqa-label">Название набора</span>
+          <input class="cqa-input" id="up-file-group" placeholder="Возьму из файла, иначе FILE" autocomplete="off" spellcheck="false">
+        </label>
+      </div>
+
+      <!-- Текст -->
+      <div class="cqa-src-pane" data-pane="paste">
+        <label class="cqa-field">
+          <span class="cqa-label">Транскрипт</span>
+          <textarea class="cqa-textarea" id="up-text" style="min-height:170px" spellcheck="false" placeholder="00:02 operator: Здравствуйте! Меня зовут Айгерим.&#10;00:10 client: Хочу узнать про тарифы&#10;00:40 system: Чат закрыт"></textarea>
+          <span class="cqa-help">Каждая реплика с новой строки: время (можно без него), роль, двоеточие, текст. Роли: client, operator, bot, system — можно по-русски.</span>
+        </label>
+        <div class="cqa-up-grid3">
+          <label class="cqa-field">
+            <span class="cqa-label">Номер диалога</span>
+            <input class="cqa-input" id="up-text-id" placeholder="Придумаю сам" autocomplete="off" spellcheck="false">
+          </label>
+          <label class="cqa-field">
+            <span class="cqa-label">Язык</span>
+            <select class="cqa-select" id="up-text-lang">
+              <option value="auto">Определить сам</option>
+              <option value="RU">Русский</option>
+              <option value="KZ">Казахский</option>
+              <option value="EN">Английский</option>
+            </select>
+          </label>
+          <label class="cqa-field">
+            <span class="cqa-label">Канал</span>
+            <select class="cqa-select" id="up-text-chan">
+              <option value="chat">Чат</option>
+              <option value="call">Звонок</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="cqa-up-status" id="up-status" role="status" aria-live="polite" hidden></div>
+    </div>
+    <div class="cqa-dialog-foot">
+      <button class="cqa-btn cqa-btn-ghost" type="button" data-close>Отмена</button>
+      <button class="cqa-btn cqa-btn-primary" type="submit" id="up-submit">
+        <svg class="i"><use href="#i-upload"/></svg>
+        <span id="up-submit-text">Загрузить набор</span>
+      </button>
+    </div>
+  </form>
+</div>
+
+<!-- ===================== ОКНО: АПЕЛЛЯЦИЯ ===================== -->
+<div class="cqa-modal" id="modal-appeal" role="dialog" aria-modal="true" aria-labelledby="ma-title">
+  <form class="cqa-dialog" id="ma-form" novalidate></form>
+</div>
+
+<!-- ===================== ОКНО: ЧЕК-ЛИСТ СОХРАНЁН ===================== -->
+<div class="cqa-modal" id="modal-cl-saved" role="dialog" aria-modal="true" aria-labelledby="mcs-title">
+  <div class="cqa-dialog">
+    <div class="cqa-dialog-head">
+      <div>
+        <h2 id="mcs-title">Сохранено</h2>
+        <p id="mcs-sub">Новая версия чек-листа.</p>
+      </div>
+      <button class="cqa-icon-btn" type="button" aria-label="Закрыть" data-close><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="cqa-dialog-body">
+      <div>
+        <h3 style="margin-bottom:8px">Что изменилось</h3>
+        <ul class="cqa-changes" id="mcs-changes"></ul>
+      </div>
+      <div class="cqa-up-status is-warn" id="mcs-warn" hidden></div>
+      <div class="cqa-preview" style="background:var(--slate-soft);color:var(--slate)">
+        <svg class="i"><use href="#i-refresh"/></svg>
+        <p>Переоценить диалоги по новой версии можно будет после подключения оценки ИИ. Уже сделанные оценки останутся привязанными к своей версии.</p>
+      </div>
+    </div>
+    <div class="cqa-dialog-foot">
+      <button class="cqa-btn cqa-btn-ghost" type="button" disabled title="Появится вместе с оценкой ИИ"><svg class="i"><use href="#i-refresh"/></svg>Переоценить диалоги</button>
+      <button class="cqa-btn cqa-btn-primary" type="button" data-close>Готово</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== ОКНО: НЕСОХРАНЁННЫЕ ИЗМЕНЕНИЯ ===================== -->
+<div class="cqa-modal" id="modal-cl-leave" role="dialog" aria-modal="true" aria-labelledby="mcl-title">
+  <div class="cqa-dialog" style="width:min(520px,100%)">
+    <div class="cqa-dialog-head">
+      <div>
+        <h2 id="mcl-title">Есть несохранённые изменения</h2>
+        <p id="mcl-sub">Если уйти без сохранения, правки пропадут.</p>
+      </div>
+      <button class="cqa-icon-btn" type="button" aria-label="Закрыть" data-close><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="cqa-dialog-foot">
+      <button class="cqa-btn cqa-btn-ghost" type="button" data-close>Остаться</button>
+      <button class="cqa-btn cqa-btn-danger" type="button" id="mcl-drop">Не сохранять</button>
+      <button class="cqa-btn cqa-btn-primary" type="button" id="mcl-save"><svg class="i"><use href="#i-check"/></svg>Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== ОКНО: НОВЫЙ ЧЕК-ЛИСТ ===================== -->
+<div class="cqa-modal" id="modal-cl-new" role="dialog" aria-modal="true" aria-labelledby="mcn-title">
+  <form class="cqa-dialog" id="mcn-form" style="width:min(560px,100%)" novalidate>
+    <div class="cqa-dialog-head">
+      <div>
+        <h2 id="mcn-title">Новый чек-лист</h2>
+        <p>Начните с копии — так быстрее, чем с нуля.</p>
+      </div>
+      <button class="cqa-icon-btn" type="button" aria-label="Закрыть" data-close><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="cqa-dialog-body">
+      <label class="cqa-field">
+        <span class="cqa-label">Название</span>
+        <input class="cqa-input" id="mcn-name" placeholder="Например, Качество звонков" autocomplete="off">
+      </label>
+      <div class="cqa-decide" role="radiogroup" aria-label="Основа">
+        <div class="cqa-choice">
+          <input type="radio" name="mcn-from" id="mcn-from-current" value="current" checked>
+          <label for="mcn-from-current"><span class="cqa-choice-radio"></span><span><b>Копия открытого</b><small id="mcn-current-name">со всеми правками последней версии</small></span></label>
+        </div>
+        <div class="cqa-choice">
+          <input type="radio" name="mcn-from" id="mcn-from-default" value="default">
+          <label for="mcn-from-default"><span class="cqa-choice-radio"></span><span><b>Чек-лист задания</b><small>8 критериев из PDF организаторов</small></span></label>
+        </div>
+      </div>
+      <div class="cqa-up-status is-error" id="mcn-err" hidden></div>
+    </div>
+    <div class="cqa-dialog-foot">
+      <button class="cqa-btn cqa-btn-ghost" type="button" data-close>Отмена</button>
+      <button class="cqa-btn cqa-btn-primary" type="submit"><svg class="i"><use href="#i-plus"/></svg>Создать</button>
+    </div>
+  </form>
+</div>
+
+<!-- ===================== ОКНО: ПОДТВЕРЖДЕНИЕ ===================== -->
+<div class="cqa-modal" id="modal-confirm" role="dialog" aria-modal="true" aria-labelledby="mcf-title">
+  <div class="cqa-dialog" style="width:min(480px,100%)">
+    <div class="cqa-dialog-head">
+      <div>
+        <h2 id="mcf-title">Удалить?</h2>
+        <p id="mcf-text"></p>
+      </div>
+      <button class="cqa-icon-btn" type="button" aria-label="Закрыть" data-close><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="cqa-dialog-foot">
+      <button class="cqa-btn cqa-btn-ghost" type="button" data-close>Отмена</button>
+      <button class="cqa-btn cqa-btn-danger" type="button" id="mcf-ok">Удалить</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== ОКНО: ПОМОЩЬ ===================== -->
+<div class="cqa-modal" id="modal-help" role="dialog" aria-modal="true" aria-labelledby="mh-title">
+  <div class="cqa-dialog">
+    <div class="cqa-dialog-head">
+      <div>
+        <h2 id="mh-title">Как пользоваться</h2>
+        <p>Четыре шага от загрузки до финальной оценки.</p>
+      </div>
+      <button class="cqa-icon-btn" type="button" aria-label="Закрыть" data-close><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="cqa-dialog-body">
+      <ol class="cqa-history">
+        <li><span class="cqa-history-dot">1</span><div><b>Загрузите диалоги</b><p>Раздел «Диалоги», кнопка «Загрузить диалоги».</p></div></li>
+        <li><span class="cqa-history-dot">2</span><div><b>Запустите оценку</b><p>Отметьте диалоги галочками и нажмите «Оценить выбранные».</p></div></li>
+        <li><span class="cqa-history-dot">3</span><div><b>Откройте карточку</b><p>Справа баллы и объяснения. «Показать в переписке» подсветит нужную реплику.</p></div></li>
+        <li><span class="cqa-history-dot is-wait">4</span><div><b>Не согласны — оспорьте</b><p>Кнопка «Оспорить» у критерия. Проверяющий решит в разделе «Апелляции».</p></div></li>
+      </ol>
+      <div class="cqa-preview" style="background:var(--slate-soft);color:var(--slate)">
+        <svg class="i"><use href="#i-help"/></svg>
+        <p><b>«Нет» и N/A — не одно и то же.</b> «Нет» — оператор должен был, но не сделал. N/A — критерий не нужен в этом разговоре, и он не влияет на итог.</p>
+      </div>
+    </div>
+    <div class="cqa-dialog-foot">
+      <button class="cqa-btn cqa-btn-primary" type="button" data-close>Понятно</button>
+    </div>
+  </div>
+</div>
+
+<div class="cqa-toast" role="status" aria-live="polite" data-toast-el>
+  <svg class="i"><use href="#i-check"/></svg>
+  <span data-toast-text></span>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/app.js"></script>
+<script src="js/timeline.js"></script>
+<script src="js/checklist-model.js"></script>
+<script src="js/scoring.js"></script>
+<script src="js/dialogs.js"></script>
+<script src="js/card.js"></script>
+<script src="js/checklists.js"></script>
+<script src="js/appeals.js"></script>
+</body>
+</html>
