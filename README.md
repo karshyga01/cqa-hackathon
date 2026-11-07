@@ -34,6 +34,18 @@
 текстовый файл: ИИ сам разложит текст на диалоги и реплики (клиент / оператор / бот / система), а система проверит,
 что каждая реплика есть в исходнике **дословно** — если ИИ что-то переписал, диалог не сохраняется (~4 с, ≈ $0,002).
 
+**Своя запись звонка** (mp3, wav, m4a… во вкладке «Файл»): речь распознаётся **на этом компьютере** (whisper.cpp,
+звук никуда не уходит), роли оператор / клиент / автоответчик расставляет ИИ по смыслу текста (уходит только текст),
+и запись сохраняется как обычный звонок — с плеером, интонацией, оценкой и апелляциями. Замер на M1 (8 ГБ):
+звонок 6,5 мин — 72 с (распознавание 59 с, роли ≈ $0,006). Нужно один раз:
+```bash
+brew install whisper-cpp ffmpeg
+mkdir -p data/models && curl -L -o data/models/ggml-large-v3-turbo-q5_0.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin   # ~575 МБ
+```
+Ограничения: казахский whisper распознаёт хуже русского; на коротких репликах ИИ иногда путает, кто говорит;
+whisper распознаёт и персональные данные, которые в расшифровках организаторов скрыты (они остаются в `data/`, не в git).
+
 Сервер слушает только `127.0.0.1`: входа по паролю нет, а в данных — переписки клиентов.
 
 ## Что умеет
@@ -166,6 +178,7 @@ server/
   lib/evaluations.js   история оценок, проверка доказательств
   lib/appeals.js       апелляции и пересчёт итога
   lib/appealExamples.js решённые апелляции как примеры для ИИ
+  lib/asr.js           распознавание своей записи звонка (whisper.cpp, локально)
   lib/results.js       results.json: сборка и проверка формата
   lib/stats.js         статистика по набору
   lib/checklists.js    чек-листы с версиями
@@ -184,6 +197,7 @@ docs/HANDOFF.md        подробное описание решений и и�
 | GET | `/api/datasets`, `/api/dialogs?q=`, `/api/dialogs/:key` | наборы, список, диалог (`key` = `<набор>:<id>`) |
 | POST | `/api/import/preview`, `/api/import/api` | `{group_id}` — посмотреть / загрузить набор из API организаторов |
 | POST | `/api/import/json`, `/api/import/text` | загрузить из файла JSON или текста в формате «время роль: текст» |
+| POST | `/api/import/audio` | `{name, data (base64), conversation_id?, group_id?}` — своя запись звонка: распознавание локально + роли по тексту |
 | POST | `/api/import/ai` | `{text, group_id?, conversation_id?, language?, channel?}` — любой текст → ИИ раскладывает на диалоги (с проверкой дословности) |
 | POST | `/api/dialogs/:key/evaluate` | `{mode: "ai"\|"mock", force?, use_appeals?}` — оценить диалог |
 | POST | `/api/evaluate` | `{keys, mode, force?, use_appeals?}` — оценить несколько (ИИ — 8 параллельно) |
@@ -205,6 +219,8 @@ docs/HANDOFF.md        подробное описание решений и и�
 | `OPENROUTER_PROVIDER` | `together` | провайдер (без переключения на другие) |
 | `OPENROUTER_REASONING` | `medium` | глубина рассуждения: low / medium / high |
 | `OPENROUTER_CONCURRENCY` | `8` | сколько диалогов оценивать одновременно |
+| `WHISPER_MODEL` | `data/models/ggml-large-v3-turbo-q5_0.bin` | модель whisper для своей записи звонка |
+| `WHISPER_CLI`, `FFMPEG`, `WHISPER_LANG` | `whisper-cli`, `ffmpeg`, `auto` | программы и язык распознавания |
 | `TEAM_NAME` | — | `team_name` для results.json (можно ввести в окне выгрузки) |
 | `PORT` | `3000` | порт сайта |
 | `ORG_API_URL` | адрес из задания | API организаторов без `group_id` |

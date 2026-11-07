@@ -29,6 +29,9 @@ const { createAiEvaluator, checkVerbatim } = require('./lib/aiEvaluator');
 
 // «Вставить что угодно»: сколько текста за раз (ответ модели ограничен ~16 тыс. токенов).
 const AI_IMPORT_MAX_CHARS = 40000;
+// Своя запись звонка: до 22 МБ (base64 в JSON укладывается в лимит тела запроса 30 МБ).
+const AUDIO_UPLOAD_MAX = 22 * 1024 * 1024;
+const { createAsr, toTurns, LANG: ASR_LANG } = require('./lib/asr');
 const { createAppealService, totalWith } = require('./lib/appeals');
 const results = require('./lib/results');
 const { computeStats } = require('./lib/stats');
@@ -105,6 +108,7 @@ function createApp({
   aiFetch,
   resultsDir = config.RESULTS_DIR,
   teamName = config.TEAM_NAME,
+  asr = createAsr(config.ASR),
 } = {}) {
   const store = new JsonStore(dataDir);
   const dialogs = createDialogService(store);
@@ -313,7 +317,7 @@ function createApp({
     ['GET', /^\/api\/health$/, () => ({ ok: true, dialogs: dialogs.list().length })],
 
     // Подключён ли ИИ (ключ не отдаётся — только факт и модель).
-    ['GET', /^\/api\/ai$/, () => ({ available: ai.available, problem: ai.keyProblem || null, model: ai.model, provider: ai.provider || null, reasoning: ai.reasoningEffort })],
+    ['GET', /^\/api\/ai$/, () => ({ available: ai.available, problem: ai.keyProblem || null, model: ai.model, provider: ai.provider || null, reasoning: ai.reasoningEffort, asr: !asr.problem(), asr_problem: asr.problem() || null })],
 
     ['GET', /^\/api\/datasets$/, () => ({ items: dialogs.listDatasets() })],
 
@@ -553,6 +557,62 @@ function createApp({
     ['POST', /^\/api\/import\/text$/, async (req) => {
       const body = await readJsonBody(req);
       return dialogs.saveFromText(body);
+    }],
+
+    // Своя запись звонка: распознавание ЛОКАЛЬНО (whisper.cpp) → роли по смыслу текста (ИИ) → звонок с плеером.
+    ['POST', /^\/api\/import\/audio$/, async (req) => {
+      const body = await readJsonBody(req);
+      const b64 = String(body.data || '').replace(/^data:[^,]*,/, '');
+      if (!b64) throw new HttpError(422, 'Выберите файл записи.');
+      const buf = Buffer.from(b64, 'base64');
+      if (buf.length < 1000) throw new HttpError(422, 'Файл записи пустой или повреждён.');
+      if (buf.length > AUDIO_UPLOAD_MAX) throw new HttpError(413, `Запись больше ${Math.round(AUDIO_UPLOAD_MAX / 1048576)} МБ.`);
+      const asrProblem = asr.problem();
+      if (asrProblem) throw new HttpError(503, `Распознавание речи не настроено: ${asrProblem}`);
+
+      const groupId = dialogs.resolveGroupId(body.group_id, null) || 'AUDIO';
+      const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-');
+      const id = (String(body.conversation_id || '').trim() || `audio-${stamp}`).replace(/[:\s]+/g, '-');
+      const key = `${groupId}:${id}`;
+      const ext = (/\.(mp3|wav|m4a|ogg|oga|opus|aac|flac|webm|mp4)$/i.exec(String(body.name || '')) || ['.mp3'])[0].toLowerCase();
+      const audioDir = path.join(dataDir, 'audio');
+      await fs.promises.mkdir(audioDir, { recursive: true });
+      const file = `${groupId}_${id}`.replace(/[^\w.-]+/g, '_') + `-upload${ext}`;
+      const target = path.join(audioDir, file);
+      await fs.promises.writeFile(`${target}.tmp`, buf);
+      let rec;
+      try {
+        rec = await asr.transcribe(`${target}.tmp`);
+      } catch (err) {
+        await fs.promises.unlink(`${target}.tmp`).catch(() => {});
+        throw new HttpError(err.status || 500, err.message);
+      }
+      if (!rec.segments.length) {
+        await fs.promises.unlink(`${target}.tmp`).catch(() => {});
+        throw new HttpError(422, 'В записи не нашлось речи.');
+      }
+
+      // Роли: ИИ по смыслу (уходит только текст). Без ключа — простые правила по словам.
+      let speakers;
+      let cost = 0;
+      if (ai.available) {
+        try { const r = await ai.assignRoles(rec.segments); speakers = r.speakers; cost = r.usage.cost_usd; } catch (err) {
+          await fs.promises.unlink(`${target}.tmp`).catch(() => {});
+          throw new HttpError(err.status || 502, `Не удалось расставить роли: ${err.message}`);
+        }
+      } else {
+        speakers = rec.segments.map((s) => (/нажмите|оцените|оценить качество|запись разговора|добро пожаловать|press \d/i.test(s.text) ? 'bot'
+          : /меня зовут|freedom|фридом|чем могу помочь|идентификац|подскажите, пожалуйста/i.test(s.text) ? 'operator' : 'client'));
+      }
+      const transcript = toTurns(rec.segments, speakers);
+
+      await fs.promises.rename(`${target}.tmp`, target);
+      await store.update('audio', (cur) => ({ ...cur, [key]: { file, bytes: buf.length, downloaded_at: new Date().toISOString(), source: 'upload' } }));
+      const result = withAudio(await dialogs.saveRecords(groupId, [{
+        conversation_id: id, channel: 'voice call', language: ASR_LANG[rec.language] || 'RU', transcript, audio_url: `local-upload:${file}`,
+      }], 'audio-upload'));
+      const roles = transcript.reduce((a, t) => { a[t.speaker] = (a[t.speaker] || 0) + 1; return a; }, {});
+      return { ...result, conversation_id: id, turns: transcript.length, roles, language: ASR_LANG[rec.language] || 'RU', asr_seconds: rec.seconds, roles_by: ai.available ? 'ai' : 'rules', cost_usd: cost };
     }],
 
     // «Вставить что угодно»: ИИ раскладывает произвольный текст на диалоги; текст реплик проверяется на дословность.

@@ -570,3 +570,57 @@ test('API: вставка в свободном виде → ИИ расклад
     assert.match(bad.json.error, /изменил текст/);
   } finally { server.close(); }
 });
+
+/* ---------- своя запись звонка: локальное распознавание → роли по тексту → звонок ---------- */
+
+test('фразы → реплики: один говорящий подряд склеивается, время — конец фразы (+0,7 с)', () => {
+  const { toTurns, clock } = require('../lib/asr');
+  const segs = [
+    { start: 0, end: 7.3, text: 'Добро пожаловать во Freedom Broker.' },
+    { start: 55.4, end: 59.3, text: 'Здравствуйте! Меня зовут Арсен.' },
+    { start: 59.6, end: 61.0, text: 'Чем могу помочь?' },
+    { start: 62.0, end: 70.0, text: 'Хочу узнать про поручение.' },
+  ];
+  const turns = toTurns(segs, ['bot', 'operator', 'operator', 'client']);
+  assert.deepEqual(turns.map((t) => [t.speaker, t.timestamp]), [['bot', '00:08'], ['operator', '01:02'], ['client', '01:11']]);
+  assert.equal(turns[1].text, 'Здравствуйте! Меня зовут Арсен. Чем могу помочь?');
+  assert.equal(clock(3725), '1:02:05');
+});
+
+test('API: загрузка аудио → распознавание → роли от ИИ → звонок с записью для плеера', async () => {
+  const fs = require('fs'); const os = require('os'); const path = require('path'); const http = require('http');
+  const { createServer } = require('../server');
+  const segments = [
+    { start: 0, end: 5, text: 'Для выбора русского языка нажмите 2.' },
+    { start: 10, end: 14, text: 'Здравствуйте, Freedom Broker, меня зовут Арсен.' },
+    { start: 15, end: 19, text: 'Почему поручение долго в обработке?' },
+  ];
+  const fakeAsr = { problem: () => '', transcribe: async (p) => { assert.ok(fs.existsSync(p)); return { language: 'ru', segments, seconds: 1.2 }; } };
+  const fr = fakeRouter([{ speakers: ['bot', 'operator', 'client'] }]);
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cqa-audio-'));
+  const server = createServer({ dataDir, resultsDir: dataDir, orgApiUrl: 'http://127.0.0.1:9/none', allowedOrigins: [], autoDownloadAudio: false, ai: { apiKey: 'sk-test-key' }, aiFetch: fr.fetchImpl, asr: fakeAsr });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const port = server.address().port;
+  const call = (method, p, body) => new Promise((resolve, reject) => {
+    const rq = http.request({ host: '127.0.0.1', port, path: p, method, headers: body ? { 'Content-Type': 'application/json' } : {} }, (res) => {
+      const ch = []; res.on('data', (c) => ch.push(c)); res.on('end', () => resolve({ status: res.statusCode, json: JSON.parse(Buffer.concat(ch).toString() || 'null') })); });
+    rq.on('error', reject); if (body) rq.write(JSON.stringify(body)); rq.end();
+  });
+  try {
+    assert.equal((await call('POST', '/api/import/audio', { name: 'x.mp3', data: '' })).status, 422);
+    const data = 'data:audio/mpeg;base64,' + Buffer.alloc(4000, 7).toString('base64');
+    const r = await call('POST', '/api/import/audio', { name: 'call.mp3', data, conversation_id: 'my-call' });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    assert.equal(r.json.group_id, 'AUDIO');
+    assert.deepEqual(r.json.roles, { bot: 1, operator: 1, client: 1 });
+    assert.equal(r.json.roles_by, 'ai');
+    assert.match(fr.calls[0].body.messages[1].content, /\[2\] Здравствуйте, Freedom Broker/, 'в ИИ ушёл только текст фраз');
+    const d = (await call('GET', '/api/dialogs/' + encodeURIComponent('AUDIO:my-call'))).json;
+    assert.equal(d.channel, 'voice call');
+    assert.equal(d.language, 'RU');
+    assert.deepEqual(d.transcript.map((t) => t.speaker), ['bot', 'operator', 'client']);
+    const st = (await call('GET', '/api/dialogs/' + encodeURIComponent('AUDIO:my-call') + '/audio/status')).json;
+    assert.equal(st.state, 'ready', 'запись лежит у нас — плеер работает');
+    assert.equal(fs.readdirSync(path.join(dataDir, 'audio')).filter((f) => f.endsWith('.tmp')).length, 0);
+  } finally { server.close(); }
+});

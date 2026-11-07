@@ -39,6 +39,13 @@ module.exports = {
   // Выгрузка результатов для организаторов: results/dev/results.json и results/prod/results.json.
   RESULTS_DIR: path.join(ROOT, 'results'),
   TEAM_NAME: process.env.TEAM_NAME || '',
+  // Загрузка своей записи звонка: распознавание речи локально (whisper.cpp), звук никуда не уходит.
+  ASR: {
+    cli: process.env.WHISPER_CLI || 'whisper-cli',
+    ffmpeg: process.env.FFMPEG || 'ffmpeg',
+    model: path.resolve(ROOT, process.env.WHISPER_MODEL || 'data/models/ggml-large-v3-turbo-q5_0.bin'),
+    language: process.env.WHISPER_LANG || 'auto',
+  },
   // Оценка ИИ через OpenRouter (шаг 5). Без ключа доступна только подставная оценка.
   AI: {
     apiKey: process.env.OPENROUTER_API_KEY || '',

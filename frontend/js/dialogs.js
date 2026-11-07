@@ -469,7 +469,7 @@
       var g = $('#up-group').value.trim() || '…';
       text = up.preview ? 'Загрузить ' + nDialogs(up.preview.total) : 'Загрузить набор ' + g;
     } else if (up.source === 'file') {
-      text = up.file ? 'Загрузить ' + nDialogs(up.file.count) : 'Загрузить из файла';
+      text = up.file ? (up.file.audio ? 'Распознать запись' : 'Загрузить ' + nDialogs(up.file.count)) : 'Загрузить из файла';
     } else {
       text = CQA.ai.available ? 'Разобрать с ИИ и добавить' : 'Добавить диалог';
     }
@@ -570,6 +570,26 @@
 
     if (up.source === 'file') {
       if (!up.file) { upStatus('error', '<p>Сначала выберите файл.</p>'); return; }
+      if (up.file.audio) {
+        var af = up.file;
+        setBusy(true, btn);
+        upStatus('loading', '<p>Распознаю запись «' + esc(af.name) + '» на этом компьютере… Обычно в 5–6 раз быстрее длины записи (5 минут разговора — около минуты).</p>');
+        var rd = new FileReader();
+        rd.onload = function () {
+          CQA.api.post('/api/import/audio', { name: af.name, data: String(rd.result), group_id: $('#up-file-group').value.trim() || undefined }).then(function (res) {
+            resetFileUi();
+            var R = { client: 'клиент', operator: 'оператор', bot: 'автоответчик' };
+            var roles = Object.keys(res.roles || {}).map(function (r) { return (R[r] || r) + ' ' + res.roles[r]; }).join(', ');
+            return afterImport(res, '', 'Запись распознана за ' + String(res.asr_seconds).replace('.', ',') + ' с: звонок ' + res.conversation_id + ' в наборе ' + res.group_id + ' — ' +
+              res.turns + ' реплик (' + roles + ')' + (res.roles_by === 'rules' ? '; роли по простым правилам — ИИ не подключён' : ''));
+          }).catch(function (err) {
+            upStatus('error', '<p>' + esc(err.message) + '</p>');
+          }).then(function () { setBusy(false); });
+        };
+        rd.onerror = function () { setBusy(false); upStatus('error', '<p>Не удалось прочитать файл.</p>'); };
+        rd.readAsDataURL(af.file);
+        return;
+      }
       setBusy(true, btn);
       upStatus('loading', '<p>Загружаю «' + esc(up.file.name) + '»…</p>');
       CQA.api.post('/api/import/json', { payload: up.file.payload, group_id: $('#up-file-group').value.trim() || undefined }).then(function (res) {
@@ -650,6 +670,23 @@
     var token = ++readToken;
     resetFileUi();
     if (!file) { upSubmitLabel(); return; }
+    // Запись звонка: распознаётся на этом компьютере (whisper.cpp), звук никуда не уходит.
+    if (/^audio\//.test(file.type) || /\.(mp3|wav|m4a|ogg|oga|opus|aac|flac|webm)$/i.test(file.name)) {
+      if (file.size > 22 * 1024 * 1024) { upStatus('error', '<p>Запись больше 22 МБ.</p>'); upSubmitLabel(); return; }
+      if (!CQA.ai.asr) {
+        upStatus('error', '<p>Распознавание речи не настроено на этом компьютере' + (CQA.ai.asr_problem ? ': ' + esc(CQA.ai.asr_problem) : '') + '</p>');
+        upSubmitLabel();
+        return;
+      }
+      up.file = { audio: true, name: file.name, file: file, count: 1 };
+      $('#up-drop').classList.add('has-file');
+      $('#up-file-title').textContent = file.name;
+      $('#up-file-sub').innerHTML = 'запись звонка, ' + (file.size / 1048576).toFixed(1).replace('.', ',') + ' МБ. <span class="cqa-btn-link">Выбрать другой</span>';
+      $('#up-file-group').placeholder = 'AUDIO';
+      upStatus('ok', '<p>Запись звонка. Нажмите «Распознать запись»: речь распознаётся на этом компьютере (звук никуда не уходит), роли оператор / клиент расставит ИИ по тексту.</p>');
+      upSubmitLabel();
+      return;
+    }
     if (file.size > 25 * 1024 * 1024) { upStatus('error', '<p>Файл больше 25 МБ.</p>'); upSubmitLabel(); return; }
     upStatus('loading', '<p>Читаю «' + esc(file.name) + '»…</p>');
     var reader = new FileReader();
