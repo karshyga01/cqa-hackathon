@@ -60,6 +60,8 @@
     card.record = null;
     card.playingIdx = -1;
     card.userMoved = false;
+    card.voice = null;
+    renderVoice();
     var token = ++card.loadToken;
 
     setState('loading');
@@ -209,6 +211,69 @@
     body.innerHTML = html;
     body.scrollTop = 0;
     decorateTranscript();
+    injectVoiceChips();
+  }
+
+  /* ---------- голос оператора (звонки) ---------- */
+
+  var VOICE_ICON = { loud: '▲', high: '↑', fast: '»', slow: '«', pause: '⏸' };
+
+  function voiceNum(x, d) { return x === null || x === undefined ? '—' : Number(x).toFixed(d || 0).replace('.', ','); }
+
+  /** Метки у реплик оператора: «громче обычного +7 дБ» и т. п. */
+  function injectVoiceChips() {
+    var body = $('#cd-tx');
+    if (!body) return;
+    body.querySelectorAll('[data-voice]').forEach(function (el) { el.remove(); });
+    var v = card.voice;
+    if (!v || v.error || !v.flagged) return;
+    v.flagged.forEach(function (i) {
+      var r = v.turns[i];
+      var meta = document.querySelector('#m-' + (i + 1) + ' .cqa-msg-meta');
+      if (!meta || !r) return;
+      r.flags.forEach(function (f) {
+        var chip = document.createElement('span');
+        chip.className = 'cqa-voice-chip is-' + f.level + (r.tense && (f.type === 'loud' || f.type === 'high') ? ' is-tense' : '');
+        chip.setAttribute('data-voice', '');
+        chip.title = 'Голос оператора (замер по записи): ' + f.text + ', ' + f.detail + '. Сравнение с обычным для этого оператора в этом звонке.';
+        chip.textContent = (VOICE_ICON[f.type] || '') + ' ' + f.text + ' ' + f.detail;
+        meta.appendChild(chip);
+      });
+    });
+  }
+
+  /** Панель под плеером: обычные значения голоса оператора и реплики, где он заметно отличается. */
+  function renderVoice() {
+    var box = $('#cd-voice');
+    if (!box) return;
+    var v = card.voice;
+    if (!card.isCall || !v) { box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    if (v.error) { box.innerHTML = '<div class="cqa-panel-body cqa-muted">Голос оператора: не удалось проанализировать запись.</div>'; return; }
+    var b = v.baseline || {};
+    var s = v.summary || {};
+    var items = (v.flagged || []).map(function (i) {
+      var r = v.turns[i];
+      var t = card.record.transcript[i];
+      return '<li><button type="button" class="cqa-voice-item" data-voice-jump="' + (i + 1) + '">' +
+        '<span class="cqa-voice-n">№' + (i + 1) + '</span>' +
+        '<span class="cqa-voice-flags">' + r.flags.map(function (f) {
+          return '<span class="cqa-voice-chip is-' + f.level + (r.tense && (f.type === 'loud' || f.type === 'high') ? ' is-tense' : '') + '">' + (VOICE_ICON[f.type] || '') + ' ' + esc(f.text) + ' ' + esc(f.detail) + '</span>';
+        }).join('') + (r.tense ? '<b class="cqa-voice-tense">напряжённо</b>' : '') + '</span>' +
+        '<span class="cqa-voice-text">' + esc(String(t.text || '').slice(0, 120)) + '</span></button></li>';
+    }).join('');
+    var headline = !v.enough
+      ? 'Мало реплик оператора для сравнения — отмечены только паузы.'
+      : (v.flagged.length
+        ? 'Заметные отличия от обычного голоса: ' + v.flagged.length + ' ' + (v.flagged.length === 1 ? 'реплика' : v.flagged.length < 5 ? 'реплики' : 'реплик') +
+          (s.tense ? ', из них «напряжённо» (громче и выше одновременно): ' + s.tense : '') + '.'
+        : 'Голос ровный: громкость, темп и высота без заметных скачков.');
+    box.innerHTML =
+      '<div class="cqa-panel-head"><div><h2 class="cqa-voice-title">Голос оператора <span class="cqa-chip cqa-chip-outline">замер по записи, без ИИ</span></h2>' +
+        '<p class="cqa-voice-sub">Обычно в этом звонке: темп ' + voiceNum(b.rate, 1) + ' слова/с · высота ≈ ' + voiceNum(b.f0) + ' Гц · по ' + (b.turns || 0) + ' репликам. ' + esc(headline) + '</p></div></div>' +
+      (items ? '<div class="cqa-panel-body"><ul class="cqa-voice-list">' + items + '</ul>' : '<div class="cqa-panel-body">') +
+      '<p class="cqa-voice-note">Одни и те же слова можно сказать спокойно или резко — поэтому сравниваем звук: громкость, темп, высоту голоса и паузы с обычными для этого оператора. ' +
+      'Это подсказка, где послушать запись, а не оценка эмоций. Запись моно: если клиент говорит одновременно с оператором, замер может ошибиться. Реплики во время удержания не сравниваются.</p></div>';
   }
 
   function eventIcon(type) {
@@ -951,6 +1016,15 @@
 
   CQA.card = { jumpTo: jumpTo, jumpToRange: jumpToRange };
 
+  // Клик по реплике в панели «Голос оператора» — переход к ней (и к месту записи).
+  var voiceBox = document.getElementById('cd-voice');
+  if (voiceBox) voiceBox.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-voice-jump]');
+    if (!b) return;
+    card.userMoved = true;
+    jumpTo(Number(b.dataset.voiceJump), { flash: true });
+  });
+
   /* ---------- плеер ---------- */
 
   function stopAudio() {
@@ -1122,6 +1196,15 @@
       }
       renderPlayerSegmentsOnly();
       card.playingIdx = -1;
+      // Голос оператора: замер по уже декодированной записи (без ИИ, звук никуда не уходит).
+      try {
+        if (window.CQA.voice) {
+          var holds = next.zones().filter(function (z) { return z.type === 'hold'; }).map(function (z) { return [z.start, z.end]; });
+          card.voice = window.CQA.voice.analyze(decoded.getChannelData(0), decoded.sampleRate, card.record.transcript, next.spans, { holds: holds });
+        }
+      } catch (e) { card.voice = { error: true }; }
+      renderVoice();
+      injectVoiceChips();
       // Ссылку на реплику применяем заново, только если пользователь ещё ничего не трогал.
       var target = /\/m-(\d+)$/.exec(location.hash);
       if (target && !card.userMoved) jumpTo(Number(target[1]), { flash: false, instant: true, keepRange: true });

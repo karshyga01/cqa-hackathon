@@ -1513,3 +1513,31 @@ a.cqa-quote-btn { text-decoration: none; display: grid; }
 .cqa-total-actions { align-items: center; }
 .cqa-total-actions .cqa-use-appeals { margin-right: auto; }
 .cqa-noeval-actions { align-items: center; }
+
+/* Голос оператора в звонке (замер по записи, без ИИ) */
+.cqa-voice { margin-bottom: 18px; }
+.cqa-voice-title { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cqa-voice-sub { color: var(--ink-2); font-size: 13.5px; margin-top: 4px; }
+.cqa-voice-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+.cqa-voice-item {
+  width: 100%; text-align: left; display: grid; grid-template-columns: 52px auto minmax(0, 1fr); gap: 10px; align-items: center;
+  padding: 8px 10px; border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--surface); cursor: pointer; font: inherit; color: inherit;
+}
+.cqa-voice-item:hover { background: #F7FAF8; border-color: var(--line); }
+.cqa-voice-n { font-weight: 700; color: var(--ink); font-size: 13.5px; }
+.cqa-voice-flags { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.cqa-voice-text { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cqa-voice-tense { font-size: 12px; color: var(--red); }
+.cqa-voice-note { color: var(--muted); font-size: 12.5px; }
+.cqa-voice-chip {
+  display: inline-flex; align-items: center; gap: 3px; height: 20px; padding: 0 7px; border-radius: 999px;
+  font-size: 11.5px; font-weight: 600; white-space: nowrap; background: var(--slate-soft); color: var(--slate);
+}
+.cqa-voice-chip.is-warn { background: var(--amber-soft); color: var(--amber); }
+.cqa-voice-chip.is-tense { background: var(--red-soft); color: var(--red); }
+.cqa-msg-meta .cqa-voice-chip { margin-left: 6px; }
+@media (max-width: 720px) {
+  .cqa-voice-item { grid-template-columns: 44px minmax(0, 1fr); }
+  .cqa-voice-text { grid-column: 1 / -1; white-space: normal; }
+}
+.cqa-msg-meta { flex-wrap: wrap; }

@@ -265,6 +265,9 @@
       <!-- Плеер звонка: дорожки «кто когда говорил», перемотка, скорость -->
       <div class="cqa-player2" id="cd-player" aria-label="Запись звонка" hidden></div>
 
+      <!-- Голос оператора: замер по записи (громкость, темп, высота, паузы), без ИИ -->
+      <div class="cqa-panel cqa-voice" id="cd-voice" aria-live="polite" hidden></div>
+
       <div class="cqa-card-grid" id="cd-grid" hidden>
         <div class="cqa-panel cqa-tx">
           <div class="cqa-panel-head cqa-tx-head">
@@ -1099,6 +1102,7 @@
 <script src="js/config.js"></script>
 <script src="js/app.js"></script>
 <script src="js/timeline.js"></script>
+<script src="js/voice.js"></script>
 <script src="js/checklist-model.js"></script>
 <script src="js/scoring.js"></script>
 <script src="js/dialogs.js"></script>
