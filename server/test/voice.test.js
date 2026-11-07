@@ -81,3 +81,61 @@ test('мало реплик — без сравнения; невозможны�
   assert.equal(v.turns[0].rate, null, '30 слов за 0,9 с — реплика неточно легла на запись');
   assert.deepEqual(v.flagged, []);
 });
+
+/* ---------- интонация ---------- */
+
+/** «Голос» с мелодией: высота качается вокруг base на ±depth полутонов (частота качания rate Гц). */
+function melody(total, parts) {
+  const x = new Float32Array(Math.round(total * SR));
+  let seed = 7;
+  for (let i = 0; i < x.length; i++) { seed = (seed * 16807) % 2147483647; x[i] = ((seed / 2147483647) - 0.5) * 0.002; }
+  for (const p of parts) {
+    let phase = 0;
+    for (let i = Math.round(p.start * SR); i < Math.round(p.end * SR); i++) {
+      const t = i / SR - p.start;
+      const st = p.depth * Math.sin(2 * Math.PI * (p.rate || 1.5) * t) + (p.fall ? -p.fall * Math.max(0, t - (p.end - p.start - 0.5)) / 0.5 : 0);
+      const f = p.base * Math.pow(2, st / 12);
+      phase += 2 * Math.PI * f / SR;
+      x[i] += (p.amp || 0.1) * Math.sin(phase);
+    }
+  }
+  return x;
+}
+
+test('интонация: плоская фраза — «монотонно», размашистая — «интонация скачет», обычные — без отметок', () => {
+  const parts = []; const transcript = []; const spans = [];
+  let t = 1;
+  const depths = [2.5, 2.5, 0.2, 2.5, 6, 2.5];   // №3 плоская, №5 скачет
+  depths.forEach((depth) => {
+    parts.push({ start: t, end: t + 2.5, base: 130, depth });
+    transcript.push({ speaker: 'operator', text: words(8) });
+    spans.push({ start: t, end: t + 2.5 });
+    t += 3.5;
+  });
+  const v = V.analyze(melody(t + 1, parts), SR, transcript, spans, {});
+  assert.equal(v.enough_intonation, true);
+  assert.ok(v.baseline.range > 3 && v.baseline.range < 7, `обычный размах ${v.baseline.range}`);
+  assert.ok(v.turns[2].flags.some((f) => f.type === 'mono'), 'плоская → монотонно');
+  assert.ok(v.turns[4].flags.some((f) => f.type === 'jumpy'), 'размашистая → скачет');
+  for (const i of [0, 1, 3, 5]) assert.deepEqual(v.turns[i].flags, [], `обычная №${i + 1} без отметок`);
+  assert.ok(v.turns[0].spark.length >= 4, 'есть точки для графика мелодии');
+});
+
+test('интонация: громче без скачков — не «напряжённо» (громкость сама по себе не тон)', () => {
+  const parts = []; const transcript = []; const spans = [];
+  let t = 1;
+  [0.1, 0.1, 0.1, 0.4, 0.1].forEach((amp) => {
+    parts.push({ start: t, end: t + 2.5, base: 130, depth: 2.5, amp });
+    transcript.push({ speaker: 'operator', text: words(8) });
+    spans.push({ start: t, end: t + 2.5 });
+    t += 3.5;
+  });
+  const v = V.analyze(melody(t + 1, parts), SR, transcript, spans, {});
+  assert.equal(v.turns[3].tense, undefined);
+  assert.deepEqual(v.turns[3].flags, [], 'только громче — без отметок');
+});
+
+test('полутона: октава = 12', () => {
+  assert.equal(Math.round(V.semitones(260, 130)), 12);
+  assert.equal(Math.round(V.semitones(130, 130)), 0);
+});

@@ -1541,3 +1541,13 @@ a.cqa-quote-btn { text-decoration: none; display: grid; }
   .cqa-voice-text { grid-column: 1 / -1; white-space: normal; }
 }
 .cqa-msg-meta { flex-wrap: wrap; }
+.cqa-voice-item { grid-template-columns: 52px 120px auto minmax(0, 1fr); }
+.cqa-voice-spark { display: block; width: 120px; height: 30px; }
+.cqa-voice-spark.is-empty { display: inline-block; }
+.cqa-voice-spark .band { fill: var(--line-2); }
+.cqa-voice-spark .mid { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 3; }
+.cqa-voice-spark .line { fill: none; stroke: var(--forest); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+@media (max-width: 720px) {
+  .cqa-voice-item { grid-template-columns: 44px 120px minmax(0, 1fr); }
+  .cqa-voice-flags { grid-column: 1 / -1; }
+}

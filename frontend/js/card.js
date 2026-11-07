@@ -216,9 +216,24 @@
 
   /* ---------- голос оператора (звонки) ---------- */
 
-  var VOICE_ICON = { loud: '▲', high: '↑', fast: '»', slow: '«', pause: '⏸' };
+  var VOICE_ICON = { mono: '—', jumpy: '〰', cut: '↘', high: '↑', loud: '▲', fast: '»', slow: '«', pause: '⏸' };
 
   function voiceNum(x, d) { return x === null || x === undefined ? '—' : Number(x).toFixed(d || 0).replace('.', ','); }
+
+  /** Мини-график мелодии фразы (полутона от обычной высоты) и серая полоса обычного размаха оператора. */
+  function voiceSpark(r, base) {
+    var pts = r.spark || [];
+    if (pts.length < 4) return '<span class="cqa-voice-spark is-empty" aria-hidden="true"></span>';
+    var W = 120, H = 30, LIM = 9;
+    var y = function (s) { var c = Math.max(-LIM, Math.min(LIM, s)); return (H / 2 - (c / LIM) * (H / 2 - 2)).toFixed(1); };
+    var half = Math.min(LIM, (base.range || 0) / 2);
+    var line = pts.map(function (s, k) { return (k * (W / (pts.length - 1))).toFixed(1) + ',' + y(s); }).join(' ');
+    var label = 'Мелодия фразы: размах ' + voiceNum(r.range, 1) + ' полутона (обычно ' + voiceNum(base.range, 1) + '). Серая полоса — обычный размах оператора.';
+    return '<svg class="cqa-voice-spark" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" role="img" aria-label="' + esc(label) + '"><title>' + esc(label) + '</title>' +
+      '<rect x="0" y="' + y(half) + '" width="' + W + '" height="' + Math.max(1, y(-half) - y(half)).toFixed(1) + '" class="band"/>' +
+      '<line x1="0" x2="' + W + '" y1="' + y(0) + '" y2="' + y(0) + '" class="mid"/>' +
+      '<polyline points="' + line + '" class="line"/></svg>';
+  }
 
   /** Метки у реплик оператора: «громче обычного +7 дБ» и т. п. */
   function injectVoiceChips() {
@@ -233,7 +248,7 @@
       if (!meta || !r) return;
       r.flags.forEach(function (f) {
         var chip = document.createElement('span');
-        chip.className = 'cqa-voice-chip is-' + f.level + (r.tense && (f.type === 'loud' || f.type === 'high') ? ' is-tense' : '');
+        chip.className = "cqa-voice-chip is-" + f.level + (r.tense && (f.type === "loud" || f.type === "high" || f.type === "jumpy") ? " is-tense" : "");
         chip.setAttribute('data-voice', '');
         chip.title = 'Голос оператора (замер по записи): ' + f.text + ', ' + f.detail + '. Сравнение с обычным для этого оператора в этом звонке.';
         chip.textContent = (VOICE_ICON[f.type] || '') + ' ' + f.text + ' ' + f.detail;
@@ -256,24 +271,33 @@
       var r = v.turns[i];
       var t = card.record.transcript[i];
       return '<li><button type="button" class="cqa-voice-item" data-voice-jump="' + (i + 1) + '">' +
-        '<span class="cqa-voice-n">№' + (i + 1) + '</span>' +
+        '<span class="cqa-voice-n">№' + (i + 1) + '</span>' + voiceSpark(r, b) +
         '<span class="cqa-voice-flags">' + r.flags.map(function (f) {
-          return '<span class="cqa-voice-chip is-' + f.level + (r.tense && (f.type === 'loud' || f.type === 'high') ? ' is-tense' : '') + '">' + (VOICE_ICON[f.type] || '') + ' ' + esc(f.text) + ' ' + esc(f.detail) + '</span>';
+          return '<span class="cqa-voice-chip is-' + f.level + (r.tense && (f.type === 'loud' || f.type === 'high' || f.type === 'jumpy') ? ' is-tense' : '') + '">' + (VOICE_ICON[f.type] || '') + ' ' + esc(f.text) + ' ' + esc(f.detail) + '</span>';
         }).join('') + (r.tense ? '<b class="cqa-voice-tense">напряжённо</b>' : '') + '</span>' +
         '<span class="cqa-voice-text">' + esc(String(t.text || '').slice(0, 120)) + '</span></button></li>';
     }).join('');
+    var parts = [];
+    if (s.mono) parts.push('монотонно — ' + s.mono);
+    if (s.jumpy) parts.push('интонация скачет — ' + s.jumpy);
+    if (s.cut) parts.push('резкое окончание — ' + s.cut);
+    if (s.high) parts.push('голос выше обычного — ' + s.high);
+    if (s.tense) parts.push('напряжённо — ' + s.tense);
+    if (s.fast || s.slow) parts.push('темп — ' + ((s.fast || 0) + (s.slow || 0)));
+    if (s.pauses) parts.push('паузы — ' + s.pauses);
     var headline = !v.enough
       ? 'Мало реплик оператора для сравнения — отмечены только паузы.'
       : (v.flagged.length
-        ? 'Заметные отличия от обычного голоса: ' + v.flagged.length + ' ' + (v.flagged.length === 1 ? 'реплика' : v.flagged.length < 5 ? 'реплики' : 'реплик') +
-          (s.tense ? ', из них «напряжённо» (громче и выше одновременно): ' + s.tense : '') + '.'
-        : 'Голос ровный: громкость, темп и высота без заметных скачков.');
+        ? 'Манера отличается от обычной в ' + v.flagged.length + ' ' + (v.flagged.length === 1 ? 'реплике' : 'репликах') + ': ' + parts.join(', ') + '.'
+        : 'Интонация ровная: без заметных отличий от обычной манеры.');
     box.innerHTML =
-      '<div class="cqa-panel-head"><div><h2 class="cqa-voice-title">Голос оператора <span class="cqa-chip cqa-chip-outline">замер по записи, без ИИ</span></h2>' +
-        '<p class="cqa-voice-sub">Обычно в этом звонке: темп ' + voiceNum(b.rate, 1) + ' слова/с · высота ≈ ' + voiceNum(b.f0) + ' Гц · по ' + (b.turns || 0) + ' репликам. ' + esc(headline) + '</p></div></div>' +
+      '<div class="cqa-panel-head"><div><h2 class="cqa-voice-title">Голос и интонация оператора <span class="cqa-chip cqa-chip-outline">замер по записи, без ИИ · на оценку не влияет</span></h2>' +
+        '<p class="cqa-voice-sub">Обычно в этом звонке: размах мелодии ' + voiceNum(b.range, 1) + ' полутона · высота ≈ ' + voiceNum(b.f0) + ' Гц · темп ' + voiceNum(b.rate, 1) + ' слова/с · по ' + (b.turns || 0) + ' репликам. ' + esc(headline) + '</p></div></div>' +
       (items ? '<div class="cqa-panel-body"><ul class="cqa-voice-list">' + items + '</ul>' : '<div class="cqa-panel-body">') +
-      '<p class="cqa-voice-note">Одни и те же слова можно сказать спокойно или резко — поэтому сравниваем звук: громкость, темп, высоту голоса и паузы с обычными для этого оператора. ' +
-      'Это подсказка, где послушать запись, а не оценка эмоций. Запись моно: если клиент говорит одновременно с оператором, замер может ошибиться. Реплики во время удержания не сравниваются.</p></div>';
+      '<p class="cqa-voice-note">Одни и те же слова можно сказать спокойно или резко, а громкость больше зависит от микрофона, чем от настроения. Поэтому смотрим на интонацию — как движется высота голоса внутри фразы — ' +
+      'и сравниваем с обычной манерой этого оператора: <b>монотонно</b> — мелодия плоская; <b>интонация скачет</b> — размах или живость почти вдвое больше обычного; <b>резкое окончание</b> — голос резко падает и звук обрывается; ' +
+      '<b>напряжённо</b> — громче обычного вместе со скачками или высоким голосом. График — мелодия фразы, серая полоса — обычный размах. ' +
+      'Это подсказка, где послушать запись, а не оценка эмоций. Запись моно: если клиент говорит одновременно, замер может ошибиться. Реплики во время удержания не сравниваются.</p></div>';
   }
 
   function eventIcon(type) {
