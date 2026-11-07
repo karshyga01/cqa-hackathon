@@ -36,6 +36,9 @@ module.exports = {
     ? process.env.AUDIO_ALLOWED_HOSTS.split(',').map((s) => s.trim()).filter(Boolean)
     : ['*.api.powerplatform.com', '*.dynamics.com'],
   FRONTEND_DIR: path.join(ROOT, 'frontend'),
+  // Выгрузка результатов для организаторов: results/dev/results.json и results/prod/results.json.
+  RESULTS_DIR: path.join(ROOT, 'results'),
+  TEAM_NAME: process.env.TEAM_NAME || '',
   // Оценка ИИ через OpenRouter (шаг 5). Без ключа доступна только подставная оценка.
   AI: {
     apiKey: process.env.OPENROUTER_API_KEY || '',

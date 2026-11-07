@@ -27,6 +27,8 @@ const { createEvaluationService } = require('./lib/evaluations');
 const { mockEvaluate } = require('./lib/mockEvaluator');
 const { createAiEvaluator } = require('./lib/aiEvaluator');
 const { createAppealService, totalWith } = require('./lib/appeals');
+const results = require('./lib/results');
+const { computeStats } = require('./lib/stats');
 
 /* ---------- утилиты ---------- */
 
@@ -97,6 +99,8 @@ function createApp({
   audioAllowedHosts = config.AUDIO_ALLOWED_HOSTS,
   ai: aiOptions = config.AI,
   aiFetch,
+  resultsDir = config.RESULTS_DIR,
+  teamName = config.TEAM_NAME,
 } = {}) {
   const store = new JsonStore(dataDir);
   const dialogs = createDialogService(store);
@@ -213,6 +217,63 @@ function createApp({
   function withAudio(result) {
     result.audio_queued = autoDownloadAudio ? audio.enqueue(result.keys || []) : 0;
     return result;
+  }
+
+  /* ---------- выгрузка результатов (results/<dev|prod>/results.json) ---------- */
+
+  const RESULT_TARGETS = { dev: null, prod: 10 };   // сколько записей должно быть (prod — ровно 10)
+
+  function resultTarget(groupId, raw) {
+    const t = String(raw || '').trim().toLowerCase() || (groupId === 'DEV' ? 'dev' : 'prod');
+    if (!Object.prototype.hasOwnProperty.call(RESULT_TARGETS, t)) throw new HttpError(400, 'Папка выгрузки: "dev" или "prod".');
+    return t;
+  }
+
+  /** Диалоги набора (пустой groupId — все) в исходном порядке. */
+  function recordsOf(groupId) {
+    return Object.values(store.get('dialogs', {}))
+      .filter((r) => !groupId || r.group_id === groupId)
+      .sort((a, b) => String(a.group_id).localeCompare(String(b.group_id)) || (a.order ?? 0) - (b.order ?? 0) || String(a.conversation_id).localeCompare(String(b.conversation_id)));
+  }
+
+  /** Диалог → последняя оценка, её версия чек-листа и апелляции этой оценки. */
+  function evaluatedItem(record) {
+    const evaluation = evaluations.latest(record.key);
+    const checklist = evaluation ? checklistOf(evaluation) : null;
+    const decided = evaluation ? appeals.list({ dialogKey: record.key }).filter((a) => a.evaluation_id === evaluation.id) : [];
+    return { record, evaluation, checklist, appeals: decided };
+  }
+
+  /** Файл результатов по набору + предупреждения (не попадают в файл). */
+  async function buildResultsFor(groupId, team) {
+    await checklistsReady;
+    const records = recordsOf(groupId);
+    if (!records.length) throw new HttpError(404, `Набор ${groupId} не загружен.`);
+    const active = checklists.getActive();
+    const warnings = [];
+    const oldChecklist = [];
+    const notAi = [];
+    const review = [];
+    let defaultKeys = true;
+    const defaults = new Set(results.ORG_CRITERIA.map((x) => x.key));
+    const items = records.map((record) => {
+      const item = evaluatedItem(record);
+      const { evaluation, checklist } = item;
+      if (evaluation) {
+        if (active && (evaluation.checklist.id !== active.id || evaluation.checklist.version !== active.version)) oldChecklist.push(record.conversation_id);
+        if (evaluation.source !== 'ai') notAi.push(record.conversation_id);
+        if (evaluation.result && evaluation.result.needs_review) review.push(record.conversation_id);
+      }
+      if (checklist && checklist.criteria.some((c) => !defaults.has(c.key))) defaultKeys = false;
+      return item;
+    });
+    const doc = results.buildResults(items, { teamName: team || teamName, fallbackModel: ai.model });
+    const errors = doc.results.filter((r) => r.status === 'error');
+    if (errors.length) warnings.push(`Без оценки или с ошибкой (status "error"): ${errors.length} — ${errors.map((r) => r.conversation_id).join(', ')}.`);
+    if (oldChecklist.length) warnings.push(`Оценены не по действующему чек-листу${active ? ` («${active.name}», версия ${active.version})` : ''}: ${oldChecklist.length} — ${oldChecklist.join(', ')}. Оцените их заново.`);
+    if (notAi.length) warnings.push(`Подставная оценка, не ИИ: ${notAi.length} — ${notAi.join(', ')}.`);
+    if (review.length) warnings.push(`Помечены «нужна проверка человеком»: ${review.length} — ${review.join(', ')}.`);
+    return { doc, warnings, defaultKeys };
   }
 
   // Ответ API организаторов после «Проверить» держим 5 минут,
@@ -385,6 +446,44 @@ function createApp({
     ['PUT', /^\/api\/checklists\/([a-z][a-z0-9-]{1,40})$/, async (req, url, m) => { await checklistsReady; return checklists.save(m[1], await readJsonBody(req, CHECKLIST_MAX_BODY)); }],
     ['POST', /^\/api\/checklists\/([a-z][a-z0-9-]{1,40})\/activate$/, async (req, url, m) => { req.resume(); await checklistsReady; return checklists.activate(m[1]); }],
     ['DELETE', /^\/api\/checklists\/([a-z][a-z0-9-]{1,40})$/, async (req, url, m) => { req.resume(); await checklistsReady; return checklists.remove(m[1]); }],
+
+    // Статистика (вкладка «Статистика»): по набору или по всем; фильтры канала и языка.
+    ['GET', /^\/api\/stats$/, async (req, url) => {
+      await checklistsReady;
+      const raw = url.searchParams.get('group_id') || '';
+      const groupId = raw ? requireGroupId(raw) : '';
+      const items = recordsOf(groupId).map((r) => ({ ...evaluatedItem(r), history: evaluations.history(r.key) }));
+      return { group_id: groupId || null, ...computeStats(items, { channel: url.searchParams.get('channel') || '', language: url.searchParams.get('language') || '' }) };
+    }],
+
+    // Выгрузка результатов в формате организаторов: посмотреть и записать в results/<dev|prod>/results.json.
+    ['GET', /^\/api\/results$/, async (req, url) => {
+      const groupId = requireGroupId(url.searchParams.get('group_id'));
+      const target = resultTarget(groupId, url.searchParams.get('target'));
+      const { doc, warnings, defaultKeys } = await buildResultsFor(groupId, url.searchParams.get('team_name'));
+      const problems = results.validateResults(doc, { expectedCount: RESULT_TARGETS[target], strictValues: defaultKeys });
+      return { target, file: `results/${target}/results.json`, problems, warnings, document: doc };
+    }],
+
+    ['POST', /^\/api\/results\/export$/, async (req) => {
+      const body = await readJsonBody(req);
+      const groupId = requireGroupId(body.group_id);
+      const target = resultTarget(groupId, body.target);
+      const { doc, warnings, defaultKeys } = await buildResultsFor(groupId, body.team_name);
+      const problems = results.validateResults(doc, { expectedCount: RESULT_TARGETS[target], strictValues: defaultKeys });
+      const dir = path.join(resultsDir, target);
+      const file = path.join(dir, 'results.json');
+      await fs.promises.mkdir(dir, { recursive: true });
+      const tmp = `${file}.${process.pid}.tmp`;
+      await fs.promises.writeFile(tmp, JSON.stringify(doc, null, 2) + '\n', 'utf8');
+      await fs.promises.rename(tmp, file);
+      const ok = doc.results.filter((r) => r.status === 'ok').length;
+      return {
+        target, file: `results/${target}/results.json`,
+        total: doc.results.length, ok, errors: doc.results.length - ok,
+        team_name: doc.team_name, model: doc.model, problems, warnings,
+      };
+    }],
 
     // Запись звонка: состояние, скачать сейчас, сам файл (с поддержкой перемотки).
     ['GET', /^\/api\/dialogs\/([^/]+)\/audio\/status$/, (req, url, m) => {

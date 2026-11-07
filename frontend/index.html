@@ -16,6 +16,7 @@
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H9l-5 4z"/></symbol>
   <symbol id="i-phone" viewBox="0 0 24 24"><path d="M5 4h3.5l2 5-2.4 1.5a11 11 0 0 0 5.4 5.4L15 13.5l5 2V19a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20h16"/><path d="M7 16v-5M12 16V6M17 16v-8"/></symbol>
   <symbol id="i-list" viewBox="0 0 24 24"><path d="M10 6h10M10 12h10M10 18h10"/><path d="M3.5 6l1.5 1.5L7.5 5M3.5 12l1.5 1.5 2.5-2.5M3.5 18l1.5 1.5 2.5-2.5"/></symbol>
   <symbol id="i-scale" viewBox="0 0 24 24"><path d="M12 4v16M8 20h8M5 7h14"/><path d="M5 7l-3 6a3 3 0 0 0 6 0zM19 7l-3 6a3 3 0 0 0 6 0z"/></symbol>
   <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/></symbol>
@@ -61,6 +62,12 @@
         </a>
       </li>
       <li>
+        <a class="cqa-nav-link" href="#stats" data-nav="stats">
+          <svg class="i"><use href="#i-chart"/></svg>
+          <span class="cqa-nav-text">Статистика<span class="cqa-nav-hint">Где теряются баллы</span></span>
+        </a>
+      </li>
+      <li>
         <a class="cqa-nav-link" href="#checklists" data-nav="checklists">
           <svg class="i"><use href="#i-list"/></svg>
           <span class="cqa-nav-text">Чек-листы<span class="cqa-nav-hint">Критерии и веса</span></span>
@@ -101,6 +108,10 @@
           <p class="cqa-head-hint">Здесь все чаты и звонки. Нажмите на строку, чтобы открыть переписку и оценку.</p>
         </div>
         <div class="cqa-head-actions">
+          <button class="cqa-btn cqa-btn-ghost cqa-btn-lg" type="button" data-open="modal-export" title="Файл results.json в формате организаторов: results/dev или results/prod">
+            <svg class="i"><use href="#i-file"/></svg>
+            Выгрузить результаты
+          </button>
           <button class="cqa-btn cqa-btn-primary cqa-btn-lg" type="button" data-open="modal-upload">
             <svg class="i"><use href="#i-upload"/></svg>
             Загрузить диалоги
@@ -775,6 +786,30 @@
       </div>
     </section>
 
+    <!-- ===================== СТАТИСТИКА ===================== -->
+    <section class="cqa-page" data-page="stats" aria-labelledby="h-st">
+      <header class="cqa-head">
+        <div class="cqa-head-text">
+          <h1 id="h-st">Статистика</h1>
+          <p class="cqa-head-hint">Общая картина по оценённым диалогам: где операторы теряют баллы, как распределены оценки, грубые ошибки. Считается по финальным оценкам — с учётом решённых апелляций.</p>
+        </div>
+      </header>
+
+      <div class="cqa-filters cqa-st-filters">
+        <label><span class="sr-only">Набор</span><select class="cqa-select" id="st-set"><option value="">Все наборы</option></select></label>
+        <label><span class="sr-only">Канал</span>
+          <select class="cqa-select" id="st-chan"><option value="">Чаты и звонки</option><option value="agent chat">Только чаты</option><option value="voice call">Только звонки</option></select>
+        </label>
+        <label><span class="sr-only">Язык</span>
+          <select class="cqa-select" id="st-lang"><option value="">Все языки</option><option value="RU">Русский</option><option value="KZ">Казахский</option><option value="EN">Английский</option></select>
+        </label>
+      </div>
+
+      <div id="st-body" aria-live="polite">
+        <div class="cqa-panel cqa-panel-body"><span class="cqa-spin" aria-hidden="true"></span> Считаю…</div>
+      </div>
+    </section>
+
     <!-- ===================== АПЕЛЛЯЦИИ ===================== -->
     <section class="cqa-page" data-page="appeals" aria-labelledby="h-ap">
       <header class="cqa-head">
@@ -988,6 +1023,43 @@
   </div>
 </div>
 
+<!-- ===================== ОКНО: ВЫГРУЗКА РЕЗУЛЬТАТОВ ===================== -->
+<div class="cqa-modal" id="modal-export" role="dialog" aria-modal="true" aria-labelledby="mx-title">
+  <form class="cqa-dialog" id="mx-form" novalidate style="width:min(560px,100%)">
+    <div class="cqa-dialog-head">
+      <div>
+        <h2 id="mx-title">Выгрузить результаты</h2>
+        <p>Файл results.json в формате организаторов. Берётся последняя оценка каждого диалога с учётом решённых апелляций.</p>
+      </div>
+      <button class="cqa-icon-btn" type="button" aria-label="Закрыть" data-close><svg class="i"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="cqa-dialog-body">
+      <div class="cqa-up-grid3 cqa-up-grid2">
+        <label class="cqa-field">
+          <span class="cqa-label">Набор</span>
+          <select class="cqa-select" id="mx-set"></select>
+        </label>
+        <label class="cqa-field">
+          <span class="cqa-label">Куда</span>
+          <select class="cqa-select" id="mx-target">
+            <option value="dev">results/dev — DEV</option>
+            <option value="prod">results/prod — контрольный</option>
+          </select>
+        </label>
+      </div>
+      <label class="cqa-field">
+        <span class="cqa-label">Название команды (team_name)</span>
+        <input class="cqa-input" id="mx-team" autocomplete="off" maxlength="120" placeholder="Например, CQA Team">
+      </label>
+      <div class="cqa-up-status" id="mx-status" role="status" aria-live="polite" hidden></div>
+    </div>
+    <div class="cqa-dialog-foot">
+      <button class="cqa-btn cqa-btn-ghost" type="button" id="mx-download">Скачать копию</button>
+      <button class="cqa-btn cqa-btn-primary" type="submit" id="mx-save">Записать в папку results</button>
+    </div>
+  </form>
+</div>
+
 <!-- ===================== ОКНО: ПОМОЩЬ ===================== -->
 <div class="cqa-modal" id="modal-help" role="dialog" aria-modal="true" aria-labelledby="mh-title">
   <div class="cqa-dialog">
@@ -1030,5 +1102,7 @@
 <script src="js/card.js"></script>
 <script src="js/checklists.js"></script>
 <script src="js/appeals.js"></script>
+<script src="js/results.js"></script>
+<script src="js/stats.js"></script>
 </body>
 </html>

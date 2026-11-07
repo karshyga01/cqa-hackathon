@@ -299,11 +299,25 @@ test('API: без ключа — 503 и понятная подсказка', as
 function resp(status, body, headers) { return new Response(JSON.stringify(body), { status, headers: headers || {} }); }
 const okBody = (content, cost) => ({ choices: [{ finish_reason: 'stop', message: { content } }], usage: { prompt_tokens: 10, completion_tokens: 10, cost } });
 
-test('обрезанный ответ (length) не повторяется зря, а деньги за неудачные попытки учитываются', async () => {
+test('обрезанный ответ (length): один повтор с меньшей глубиной рассуждения, деньги за неудачные попытки учитываются', async () => {
   let n = 0;
-  const ai = AI.createAiEvaluator({ apiKey: 'sk-test-key', retryDelayMs: 1, fetchImpl: async () => { n += 1;
-    return resp(200, { choices: [{ finish_reason: 'length', message: { content: '' } }], usage: { completion_tokens: 16000, completion_tokens_details: { reasoning_tokens: 15990 }, cost: 0.02 } }); } });
-  await assert.rejects(() => ai.evaluate(RECORD, CL), (e) => n === 1 && /обрезан/.test(e.message) && /15990/.test(e.message) && e.usage.cost_usd === 0.02);
+  const efforts = [];
+  const truncated = () => resp(200, { choices: [{ finish_reason: 'length', message: { content: '' } }], usage: { completion_tokens: 16000, completion_tokens_details: { reasoning_tokens: 15990 }, cost: 0.02 } });
+  const ai = AI.createAiEvaluator({ apiKey: 'sk-test-key', retryDelayMs: 1, fetchImpl: async (url, opts) => { n += 1;
+    efforts.push(JSON.parse(opts.body).reasoning.effort); return truncated(); } });
+  await assert.rejects(() => ai.evaluate(RECORD, CL), (e) => n === 2 && /обрезан/.test(e.message) && /15990/.test(e.message) && e.usage.cost_usd === 0.04);
+  assert.deepEqual(efforts, ['medium', 'low'], 'тот же запрос не повторяется: второй — с low');
+  // повтор с low помог — оценка есть, в расходе отмечено
+  let m = 0;
+  const ai1 = AI.createAiEvaluator({ apiKey: 'sk-test-key', retryDelayMs: 1, fetchImpl: async () => { m += 1;
+    return m === 1 ? truncated() : resp(200, okBody(JSON.stringify({ criteria: goodCriteria(), summary: '' }), 0.01)); } });
+  const ok = await ai1.evaluate(RECORD, CL);
+  assert.equal(ok.usage.reasoning_fallback, 'low');
+  assert.equal(ok.usage.cost_usd, 0.03);
+  // глубина уже low — повторять нечем
+  let z = 0;
+  const aiLow = AI.createAiEvaluator({ apiKey: 'sk-test-key', reasoningEffort: 'low', retryDelayMs: 1, fetchImpl: async () => { z += 1; return truncated(); } });
+  await assert.rejects(() => aiLow.evaluate(RECORD, CL), () => z === 1);
   // не JSON дважды, потом успех: цена = все три попытки
   let k = 0;
   const ai2 = AI.createAiEvaluator({ apiKey: 'sk-test-key', retryDelayMs: 1, fetchImpl: async () => { k += 1;

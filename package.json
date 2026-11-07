@@ -6,7 +6,7 @@
   "main": "server/server.js",
   "scripts": {
     "start": "node server/server.js",
-    "test": "node --test server/test/import.test.js server/test/server.test.js server/test/audio.test.js server/test/checklists.test.js server/test/scoring.test.js server/test/evaluations.test.js server/test/ai.test.js server/test/appeals.test.js"
+    "test": "node --test server/test/import.test.js server/test/server.test.js server/test/audio.test.js server/test/checklists.test.js server/test/scoring.test.js server/test/evaluations.test.js server/test/ai.test.js server/test/appeals.test.js server/test/results.test.js"
   },
   "engines": {
     "node": ">=18"
