@@ -24,6 +24,7 @@
 
 const crypto = require('crypto');
 const { validateAnswers } = require('./evaluations');
+const { examplesText, examplesHash } = require('./appealExamples');
 
 const PROMPT_VERSION = 'v3';
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -152,9 +153,10 @@ function buildSchema(criteria) {
   };
 }
 
-function buildMessages(record, checklist, criteria) {
+function buildMessages(record, checklist, criteria, examples) {
+  const precedents = examples ? examplesText(examples, criteria) : '';
   return [
-    { role: 'system', content: `${SYSTEM_PROMPT}\n\n${checklistText(checklist, criteria)}` },
+    { role: 'system', content: `${SYSTEM_PROMPT}\n\n${checklistText(checklist, criteria)}${precedents ? `\n\n${precedents}` : ''}` },
     { role: 'user', content: transcriptText(record) },
   ];
 }
@@ -395,12 +397,17 @@ function createAiEvaluator({
    * @returns {{ answers, summary, usage, model, served_by, reused: [ключи], asked: [ключи], retried: [ключи] }}
    * При ошибке у исключения есть err.usage — сколько уже потрачено.
    */
-  async function evaluate(record, checklist, { previous = null, previousSummary = '', force = false, signal } = {}) {
+  async function evaluate(record, checklist, { previous = null, previousSummary = '', force = false, signal, examples = null } = {}) {
     if (!available) throw new AiError(503, keyProblem || 'ИИ не подключён: добавьте OPENROUTER_API_KEY в .env и перезапустите сервер.');
     if (!record.transcript || !record.transcript.length) throw new AiError(422, 'В диалоге нет реплик — оценивать нечего.');
 
     const tHash = transcriptHash(record);
-    const fps = Object.fromEntries(checklist.criteria.map((c) => [c.key, fingerprint({ model, provider, reasoningEffort, checklist, criterion: c, tHash, record })]));
+    const ex = examples && typeof examples === 'object' ? examples : {};
+    // Примеры из апелляций меняют запрос по критерию → входят в его отпечаток (без примеров отпечаток прежний).
+    const fps = Object.fromEntries(checklist.criteria.map((c) => {
+      const base = fingerprint({ model, provider, reasoningEffort, checklist, criterion: c, tHash, record });
+      return [c.key, ex[c.key] && ex[c.key].length ? sha({ base, ex: examplesHash(ex[c.key]) }) : base];
+    }));
     const answers = {};
     const reused = [];
     const asked = [];
@@ -439,7 +446,7 @@ function createAiEvaluator({
     try {
       if (asked.length) {
         const targets = checklist.criteria.filter((c) => asked.includes(c.key));
-        const first = await callSafe(buildMessages(record, checklist, targets), buildSchema(targets));
+        const first = await callSafe(buildMessages(record, checklist, targets, ex), buildSchema(targets));
         servedBy = first.served_by;
         usedModel = first.model;
         summary = String(first.parsed.summary || '').trim();
@@ -462,7 +469,7 @@ function createAiEvaluator({
           ].join('\n');
           try {
             const second = await callSafe([
-              ...buildMessages(record, checklist, badCrit),
+              ...buildMessages(record, checklist, badCrit, ex),
               { role: 'assistant', content: JSON.stringify({ criteria: Object.fromEntries(badCrit.map((c) => [c.key, first.parsed.criteria[c.key]])) }) },
               { role: 'user', content: feedback },
             ], buildSchema(badCrit));
@@ -489,6 +496,9 @@ function createAiEvaluator({
     if (!summary && reused.length) summary = previousSummary || '';
     const u = finalUsage();
     if (fallbackEffort) u.reasoning_fallback = fallbackEffort;   // видно в истории оценки
+    // Какие решения по апелляциям ушли в запрос (по заново спрошенным критериям) — показываем в карточке.
+    const used = Object.fromEntries(asked.filter((k) => ex[k] && ex[k].length).map((k) => [k, ex[k].map((e) => e.no)]));
+    if (Object.keys(used).length) u.appeal_examples = used;
     return { answers, summary, usage: u, model: usedModel, served_by: servedBy, reused, asked, retried };
   }
 

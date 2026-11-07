@@ -354,6 +354,10 @@
     });
     $('#dl-sel-clear').addEventListener('click', function () { state.selected = {}; renderTable(); });
     $('#dl-evaluate').addEventListener('click', evaluateSelected);
+    CQA.aiReady.then(function (ai) {
+      var help = $('#dl-eval-help');
+      if (help && ai && ai.available) help.textContent = 'Оценка ИИ (' + CQA.shortModel(ai.model) + '). Повторно спрашиваются только изменившиеся критерии';
+    });
 
     var body = $('#dl-body');
     body.addEventListener('change', function (e) {
@@ -395,7 +399,7 @@
     btn.classList.add('is-busy');
     var mode = CQA.ai.available ? 'ai' : 'mock';
     btn.querySelector('span').textContent = (mode === 'ai' ? 'ИИ оценивает ' : 'Оцениваю ') + nDialogs(keys.length) + '…';
-    CQA.api.post('/api/evaluate', { keys: keys, mode: mode }).then(function (res) {
+    CQA.api.post('/api/evaluate', { keys: keys, mode: mode, use_appeals: mode === 'ai' && CQA.useAppeals }).then(function (res) {
       state.selected = {};
       var msg = 'Оценено: ' + nDialogs(res.done) + (mode === 'ai' ? ' (ИИ)' : ' (подставная оценка, не ИИ)');
       if (mode === 'ai' && res.cost_usd > 0) msg += ' · ' + CQA.money(res.cost_usd);

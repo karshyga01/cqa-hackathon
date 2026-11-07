@@ -347,7 +347,7 @@
       (CQA.ai.available
         ? '<p>ИИ (' + esc(CQA.shortModel(CQA.ai.model)) + ') прочитает диалог и ответит по каждому критерию с репликами-доказательствами. Обычно это занимает 10–40 секунд.</p>' +
           '<div class="cqa-noeval-actions"><button class="cqa-btn cqa-btn-primary" type="button" data-evaluate="ai">' + icon('i-spark') + '<span>Оценить ИИ</span></button>' +
-          '<button class="cqa-btn cqa-btn-ghost" type="button" data-evaluate="mock"><span>Подставная оценка</span></button></div>'
+          '<button class="cqa-btn cqa-btn-ghost" type="button" data-evaluate="mock"><span>Подставная оценка</span></button>' + CQA.appealsToggleHtml() + '</div>'
         : '<p>ИИ не подключён: добавьте <code>OPENROUTER_API_KEY</code> в файл <code>.env</code> и перезапустите сервер. Пока можно сделать <b>подставную оценку</b> по простым правилам — чтобы проверить экран результата.</p>' +
           '<button class="cqa-btn cqa-btn-primary" type="button" data-evaluate="mock">' + icon('i-spark') + '<span>Подставная оценка</span></button>') +
     '</div></div>';
@@ -659,7 +659,8 @@
     var src = ev.source === 'mock'
       ? '<span class="cqa-chip cqa-chip-amber" title="Сделана простыми правилами по ключевым словам, не ИИ">Подставная оценка</span>'
       : '<span class="cqa-chip cqa-chip-outline cqa-chip-wrap" title="' + esc(aiTitle(ev)) + '">ИИ: ' + esc(CQA.shortModel(ev.model)) + '</span>' +
-        (ev.usage && ev.usage.cost_usd > 0 ? '<span class="cqa-chip cqa-chip-outline" title="Стоимость этой оценки по данным OpenRouter">' + money(ev.usage.cost_usd) + '</span>' : '');
+        (ev.usage && ev.usage.cost_usd > 0 ? '<span class="cqa-chip cqa-chip-outline" title="Стоимость этой оценки по данным OpenRouter">' + money(ev.usage.cost_usd) + '</span>' : '') +
+        appealExamplesChip(ev, cl);
     var when = new Date(ev.created_at);
     var whenTxt = isNaN(when) ? '' : when.toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
 
@@ -693,6 +694,7 @@
         '<li>N/A не учитывается, его вес делится между остальными критериями.</li>' +
         '<li>Итог округляется до двух знаков. Грубые ошибки отмечаются отдельно и в баллы не входят.</li></ul></details>' +
       '<div class="cqa-total-actions">' +
+        (CQA.ai.available ? CQA.appealsToggleHtml() : '') +
         (ev.source !== 'ai' && CQA.ai.available ? '<button class="cqa-btn cqa-btn-primary cqa-btn-sm" type="button" data-evaluate="ai">' + icon('i-spark') + '<span>Оценить ИИ</span></button>' : '') +
         '<button class="cqa-btn cqa-btn-ghost cqa-btn-sm" type="button" data-evaluate="' + (ev.source === 'ai' ? 'ai' : 'mock') + '" data-force="1">' + icon('i-refresh') + '<span>Оценить заново</span></button></div>' +
     '</div>';
@@ -818,6 +820,21 @@
     if (stEl) stEl.innerHTML = statusChipHtml();
   }
 
+  /** Чип «Учтены апелляции»: какие решения проверяющего ушли в запрос к ИИ как примеры. */
+  function appealExamplesChip(ev, cl) {
+    var ex = ev && ev.usage && ev.usage.appeal_examples;
+    if (!ex || !Object.keys(ex).length) return '';
+    var names = {};
+    ((cl && cl.criteria) || []).forEach(function (c) { names[c.key] = c.name; });
+    var nos = [];
+    var lines = Object.keys(ex).map(function (k) {
+      ex[k].forEach(function (n) { if (nos.indexOf(n) === -1) nos.push(n); });
+      return (names[k] || k) + ': апелляции №' + ex[k].join(', №');
+    });
+    return '<span class="cqa-chip cqa-chip-blue cqa-chip-wrap" title="' + esc('ИИ получил как примеры решения проверяющего по прошлым апелляциям (другие диалоги):\n' + lines.join('\n')) + '">' +
+      icon('i-scale') + 'Учтены апелляции: №' + nos.join(', №') + '</span>';
+  }
+
   /** Подсказка к чипу модели: провайдер, токены, что взято из прошлой оценки. */
   function aiTitle(ev) {
     var u = ev.usage || {};
@@ -844,7 +861,8 @@
     var label = btn.querySelector('span');
     if (label) label.textContent = mode === 'ai' ? 'ИИ оценивает…' : 'Оцениваю…';
     var closedAppeals = 0;
-    CQA.api.post('/api/dialogs/' + encodeURIComponent(key) + '/evaluate', { mode: mode, force: force }).then(function (res) {
+    var useAppeals = mode === 'ai' && CQA.useAppeals;
+    CQA.api.post('/api/dialogs/' + encodeURIComponent(key) + '/evaluate', { mode: mode, force: force, use_appeals: useAppeals }).then(function (res) {
       closedAppeals = (res && res.appeals_closed) || 0;
       return CQA.api.get('/api/dialogs/' + encodeURIComponent(key) + '/evaluation');
     }).then(function (payload) {
@@ -858,6 +876,7 @@
       CQA.toast('Готово: ' + (mode === 'ai' ? 'оценка ИИ' : 'подставная оценка') + (here ? '' : ' диалога ' + key.split(':').pop()) + ' — ' + total +
         (u && u.cost_usd > 0 ? ' · ' + money(u.cost_usd) : '') +
         (u && u.reused && u.reused.length && !(u.asked && u.asked.length) ? ' (ничего не изменилось — взято из прошлой оценки)' : '') +
+        (useAppeals ? (u && u.appeal_examples ? ' · учтены апелляции: ' + Object.keys(u.appeal_examples).length + ' крит.' : ' · подходящих решений по апелляциям нет') : '') +
         (closedAppeals ? '. Открытые апелляции закрыты: ' + closedAppeals + ' (оценка обновилась)' : ''));
       if (closedAppeals) document.dispatchEvent(new CustomEvent('cqa:appeals-changed'));
       document.dispatchEvent(new CustomEvent('cqa:evaluations-changed'));

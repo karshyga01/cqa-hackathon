@@ -206,7 +206,10 @@
             <svg class="i i-sm"><use href="#i-spark"/></svg>
             <span>Оценить выбранные</span>
           </button>
-          <span class="cqa-help">Пока подставная оценка по правилам (не ИИ) — для проверки экрана</span>
+          <label class="cqa-check cqa-use-appeals" title="ИИ получит решения проверяющего по прошлым апелляциям на те же критерии (из других диалогов, до 3 на критерий) как примеры, как применять чек-лист в компании. По умолчанию выключено.">
+            <input type="checkbox" data-use-appeals id="dl-use-appeals"> Учитывать апелляции
+          </label>
+          <span class="cqa-help" id="dl-eval-help">Пока подставная оценка по правилам (не ИИ) — для проверки экрана</span>
           <button class="cqa-btn-link" type="button" id="dl-sel-clear" style="font-size:13.5px">Снять выделение</button>
         </div>
 

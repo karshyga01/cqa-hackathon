@@ -29,6 +29,7 @@ const { createAiEvaluator } = require('./lib/aiEvaluator');
 const { createAppealService, totalWith } = require('./lib/appeals');
 const results = require('./lib/results');
 const { computeStats } = require('./lib/stats');
+const { selectExamples } = require('./lib/appealExamples');
 
 /* ---------- утилиты ---------- */
 
@@ -156,7 +157,19 @@ function createApp({
     return null;
   }
 
-  async function evaluateDialog(key, { mode = 'mock', checklistId, force = false } = {}) {
+  /** Решённые апелляции как примеры для ИИ (переключатель «Учитывать апелляции»). */
+  function appealExamplesFor(record, cl) {
+    return selectExamples(appeals.list(), cl, {
+      dialogKey: record.key,
+      language: record.language,
+      criterionOf: (a) => {
+        try { return checklists.getArchived(a.checklist.id, a.checklist.version).criteria.find((c) => c.key === a.criterion_key) || null; } catch (_) { return null; }
+      },
+      dialogOf: (k) => dialogs.get(k),
+    });
+  }
+
+  async function evaluateDialog(key, { mode = 'mock', checklistId, force = false, useAppeals = false } = {}) {
     await checklistsReady;
     const record = dialogs.get(key);
     if (!record) throw new HttpError(404, `Диалог ${key} не найден.`);
@@ -172,7 +185,8 @@ function createApp({
     const prev = lastAiEvaluation(key);
     let out;
     try {
-      out = await ai.evaluate(record, cl, { previous: prev && prev.answers, previousSummary: prev && prev.summary, force });
+      const examples = useAppeals ? appealExamplesFor(record, cl) : null;
+      out = await ai.evaluate(record, cl, { previous: prev && prev.answers, previousSummary: prev && prev.summary, force, examples });
     } catch (err) {
       if (err.cause) console.error('[ai] причина:', err.cause);   // только код ошибки, без ключа
       const e = new HttpError(err.status || 502, err.message);
@@ -182,7 +196,7 @@ function createApp({
     }
     return withStaleAppeals(key, await evaluations.save(key, {
       record, checklist: cl, checklistRef, answers: out.answers, source: 'ai', model: out.model, summary: out.summary,
-      usage: { ...out.usage, provider: out.served_by || ai.provider || null, reused: out.reused, asked: out.asked, retried: out.retried },
+      usage: { ...out.usage, provider: out.served_by || ai.provider || null, reused: out.reused, asked: out.asked, retried: out.retried, use_appeals: Boolean(useAppeals) },
     }));
   }
 
@@ -382,7 +396,7 @@ function createApp({
 
     ['POST', /^\/api\/dialogs\/([^/]+)\/evaluate$/, async (req, url, m) => {
       const body = await readJsonBody(req);
-      const { evaluation, problems } = await evaluateDialog(decodeKey(m[1]), { mode: body.mode || 'mock', checklistId: body.checklist_id, force: body.force === true });
+      const { evaluation, problems } = await evaluateDialog(decodeKey(m[1]), { mode: body.mode || 'mock', checklistId: body.checklist_id, force: body.force === true, useAppeals: body.use_appeals === true });
       return { evaluation, problems };
     }],
 
@@ -404,7 +418,7 @@ function createApp({
         while (queue.length && !fatal) {
           const key = queue.shift();
           try {
-            const { evaluation } = await evaluateDialog(key, { mode, checklistId: body.checklist_id, force: body.force === true });
+            const { evaluation } = await evaluateDialog(key, { mode, checklistId: body.checklist_id, force: body.force === true, useAppeals: body.use_appeals === true });
             done.push({ key, total: evaluation.result.total, reused: evaluation.usage ? (evaluation.usage.reused || []).length : 0 });
             if (evaluation.usage) cost += evaluation.usage.cost_usd || 0;
           } catch (err) {

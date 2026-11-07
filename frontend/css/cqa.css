@@ -1506,3 +1506,10 @@ a.cqa-quote-btn { text-decoration: none; display: grid; }
   .cqa-st-filters .cqa-select { min-width: 0; flex: 1 1 140px; }
   .cqa-st-filters label { flex: 1 1 140px; }
 }
+
+/* Переключатель «Учитывать апелляции» (решения проверяющего как примеры для ИИ) */
+.cqa-use-appeals { font-size: 13.5px; color: var(--ink-2); white-space: nowrap; }
+.cqa-use-appeals input { width: 16px; height: 16px; }
+.cqa-total-actions { align-items: center; }
+.cqa-total-actions .cqa-use-appeals { margin-right: auto; }
+.cqa-noeval-actions { align-items: center; }

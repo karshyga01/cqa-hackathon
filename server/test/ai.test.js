@@ -460,3 +460,68 @@ test('объяснение не по-русски → переспрос тол�
   assert.equal(out.answers.c_contact.explanation, 'В первом ответе оператор поздоровался и представился.');
   assert.deepEqual(out.retried, ['c_contact']);
 });
+
+/* ---------- решённые апелляции как примеры для ИИ ---------- */
+
+const EX = require('../lib/appealExamples');
+
+function appealOf(over) {
+  return {
+    id: 'ap_' + Math.random().toString(36).slice(2, 8), no: 1, rev: 2, dialog_key: 'DEV:other', criterion_key: 'c_closing',
+    checklist: { id: 'chat-quality', version: 1 }, status: 'changed',
+    original: { answer: 'yes', explanation: 'Попрощался.' }, comment: 'Голое прощание — не итог',
+    decision: { outcome: 'changed', new_value: 'no', reason: 'Нет итога и предложения помощи', decided_at: '2026-11-08T01:00:00Z' },
+    fragment: { turns: [{ n: 13, speaker: 'client', text: 'Спасибо!' }, { n: 14, speaker: 'operator', text: 'Пожалуйста. Хорошего дня!' }] },
+    ...over,
+  };
+}
+const crit = (key) => CL.criteria.find((c) => c.key === key);
+const dialogsById = { 'DEV:other': { conversation_id: 'other', language: 'RU' }, 'DEV:kz': { conversation_id: 'kz', language: 'KZ' }, 'DEV:self': { conversation_id: 'self', language: 'RU' } };
+
+test('примеры из апелляций: только решённые, тот же смысл критерия, не из того же диалога, до 3, сначала тот же язык', () => {
+  const list = [
+    appealOf({ no: 1 }),
+    appealOf({ no: 2, status: 'open', decision: null }),                    // не решена
+    appealOf({ no: 3, status: 'stale' }),                                   // устарела
+    appealOf({ no: 4, dialog_key: 'DEV:self' }),                            // тот же диалог
+    appealOf({ no: 5, status: 'kept', decision: { outcome: 'kept', reason: 'ИИ прав', decided_at: '2026-11-08T02:00:00Z' } }),
+    appealOf({ no: 6, dialog_key: 'DEV:kz', decision: { new_value: 'no', reason: 'то же', decided_at: '2026-11-08T05:00:00Z' } }),
+    appealOf({ no: 7, decision: { new_value: 'no', reason: 'старое', decided_at: '2026-11-01T00:00:00Z' } }),
+    appealOf({ no: 8, criterion_key: 'c_empathy' }),                        // другой критерий
+  ];
+  const opts = { dialogKey: 'DEV:self', language: 'RU', criterionOf: (a) => crit(a.criterion_key), dialogOf: (k) => dialogsById[k] };
+  const ex = EX.selectExamples(list, CL, opts);
+  assert.deepEqual(ex.c_closing.map((e) => e.no), [5, 1, 7], 'RU сначала (свежие первыми), казахский не влез в 3');
+  assert.equal(ex.c_closing[0].final_answer, 'yes', '«оставлено» — правильным остаётся ответ ИИ');
+  assert.equal(ex.c_closing[1].final_answer, 'no');
+  assert.deepEqual(ex.c_empathy.map((e) => e.no), [8]);
+  // критерий заменили (другое описание) — старые решения не переносятся
+  const changed = { ...CL, criteria: CL.criteria.map((c) => (c.key === 'c_closing' ? { ...c, description: 'Да — оператор соблюдал регламент.' } : c)) };
+  assert.equal(EX.selectExamples(list, changed, opts).c_closing, undefined);
+});
+
+test('текст примеров: решение проверяющего, без номеров реплик чужого диалога', () => {
+  const ex = EX.selectExamples([appealOf({ no: 3 })], CL, { dialogKey: 'DEV:self', criterionOf: (a) => crit(a.criterion_key), dialogOf: (k) => dialogsById[k] });
+  const txt = EX.examplesText(ex, CL.criteria);
+  assert.match(txt, /Precedents/);
+  assert.match(txt, /апелляция №3/);
+  assert.match(txt, /ИЗМЕНЕНО на «Нет». Причина: Нет итога/);
+  assert.match(txt, /OPERATOR: Пожалуйста. Хорошего дня!/);
+  assert.doesNotMatch(txt, /\[14\]/, 'номера чужих реплик не показываем');
+  assert.equal(EX.examplesText({}, CL.criteria), '');
+});
+
+test('оценка с примерами: они в запросе, меняют отпечаток только своего критерия, отмечены в расходе', async () => {
+  const ex = EX.selectExamples([appealOf({ no: 3 })], CL, { dialogKey: 'T:1', criterionOf: (a) => crit(a.criterion_key), dialogOf: (k) => dialogsById[k] });
+  const fr = fakeRouter([{ criteria: goodCriteria(), summary: 'Итог.' }, { criteria: goodCriteria(), summary: 'Итог.' }]);
+  const ai = AI.createAiEvaluator({ apiKey: 'sk-test-key', fetchImpl: fr.fetchImpl });
+  const plain = await ai.evaluate(RECORD, CL);
+  assert.doesNotMatch(fr.calls[0].body.messages[0].content, /Precedents/, 'выключено — примеров нет');
+  assert.equal(plain.usage.appeal_examples, undefined);
+  // включили: спрашивается заново только «Завершение» — у остальных отпечаток прежний
+  const withEx = await ai.evaluate(RECORD, CL, { previous: plain.answers, examples: ex });
+  assert.deepEqual(withEx.asked, ['c_closing']);
+  assert.match(fr.calls[1].body.messages[0].content, /апелляция №3/);
+  assert.deepEqual(withEx.usage.appeal_examples, { c_closing: [3] });
+  assert.notEqual(withEx.answers.c_closing.fp, plain.answers.c_closing.fp);
+});

@@ -48,6 +48,20 @@
   CQA.ai = { available: false };
   CQA.aiReady = request('GET', '/api/ai').then(function (info) { CQA.ai = info || CQA.ai; return CQA.ai; }, function () { return CQA.ai; });
   CQA.shortModel = function (m) { return String(m || '').replace(/^[^/]+\//, ''); };
+
+  /* «Учитывать апелляции»: решения проверяющего по прошлым апелляциям уходят в запрос к ИИ как примеры.
+     Одна настройка на всё приложение, по умолчанию выключена (не запоминается между запусками). */
+  CQA.useAppeals = false;
+  CQA.appealsToggleHtml = function () {
+    return '<label class="cqa-check cqa-use-appeals" title="ИИ получит решения проверяющего по прошлым апелляциям на те же критерии (из других диалогов, до 3 на критерий) как примеры, как применять чек-лист в компании. По умолчанию выключено.">' +
+      '<input type="checkbox" data-use-appeals' + (CQA.useAppeals ? ' checked' : '') + '> Учитывать апелляции</label>';
+  };
+  document.addEventListener('change', function (e) {
+    var el = e.target;
+    if (!el || !el.matches || !el.matches('[data-use-appeals]')) return;
+    CQA.useAppeals = el.checked;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-use-appeals]'), function (x) { x.checked = CQA.useAppeals; });
+  });
   /* Цена в долларах: мелкие суммы с нужным числом знаков, чтобы не показывать «$0». */
   CQA.money = function (x) {
     x = Number(x) || 0;
